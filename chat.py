@@ -110,7 +110,7 @@ class Program():
         self.writeresult("\n\n")
 
         # Get all url streams
-        streams = scrapetube.get_channel(channel_id=self.idchannel, content_type="streams", limit=20, sort_by="newest")
+        streams = scrapetube.get_channel(channel_id=self.idchannel, content_type="streams", sort_by="newest")
 
         for stream in streams:
             url = "https://www.youtube.com/watch?v="+str(stream['videoId'])

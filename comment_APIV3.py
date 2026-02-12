@@ -104,7 +104,7 @@ class Program():
             self.writeresult("Type : " + videotype)
             self.writeresult("\n\n")
             
-            videos = scrapetube.get_channel(channel_id=self.idchannel, content_type=videotype, limit=20, sort_by="newest")
+            videos = scrapetube.get_channel(channel_id=self.idchannel, content_type=videotype, sort_by="newest")
             videosList = list(videos)
             for video in videosList:
                 url = "https://www.youtube.com/watch?v="+str(video['videoId'])
