@@ -12,6 +12,7 @@ class Program():
     def __init__(self, idchannel, urlchannel, videoId, youtubeKey, tz, dateFormats):
         self.idchannel = idchannel
         self.urlchannel = urlchannel
+        self.videoId = videoId
         self.youtubeKey = youtubeKey
         self.tzinfo = ZoneInfo(tz)
         self.dateFormats = dateFormats
@@ -94,11 +95,10 @@ class Program():
         self.writelog("Starting program")
         self.initChannel()
 
-        self.writeresult("Channel " + self.urlchannel + " id : " + self.idchannel)
+        self.writeresult("Chaine " + self.urlchannel + " id : " + self.idchannel)
         self.writeresult("\n\n")
 
-        videoId = "Y-OflRW5HKs"
-        url = "https://www.youtube.com/watch?v=" + videoId
+        url = "https://www.youtube.com/watch?v=" + self.videoId
         print(url)
         self.writeresult(url)
 
@@ -106,7 +106,7 @@ class Program():
         idComment = 0
 
         # Get additional infos of video
-        additionnalInfosURL = "https://www.googleapis.com/youtube/v3/videos?key=" + self.youtubeKey + "&id=" + videoId + "&part=snippet,contentDetails,liveStreamingDetails,statistics"
+        additionnalInfosURL = "https://www.googleapis.com/youtube/v3/videos?key=" + self.youtubeKey + "&id=" + self.videoId + "&part=snippet,contentDetails,liveStreamingDetails,statistics"
         print(additionnalInfosURL)
         try:
             response = requests.get(additionnalInfosURL)
@@ -114,12 +114,12 @@ class Program():
                 additionnalInfosResponse = response.text
                 video_json = json.loads(additionnalInfosResponse)
             else:
-                print(f"[×] idVideo={videoId} Response of additionnalInfosURL {additionnalInfosURL} isn't OK : {response.status_code} {response.text}")
-                self.writelog(f"[×] idVideo={videoId} Response of additionnalInfosURL {additionnalInfosURL} isn't OK : {response.status_code} {response.text}")
+                print(f"[×] idVideo={self.videoId} Response of additionnalInfosURL {additionnalInfosURL} isn't OK : {response.status_code} {response.text}")
+                self.writelog(f"[×] idVideo={self.videoId} Response of additionnalInfosURL {additionnalInfosURL} isn't OK : {response.status_code} {response.text}")
                 self.exitProgram()
         except Exception as e:
-            print(f"[×] idVideo={videoId} Error additionnalInfosURL {additionnalInfosURL} : {e}")
-            self.writelog(f"[×] idVideo={videoId} Error additionnalInfosURL {additionnalInfosURL} : {e}")
+            print(f"[×] idVideo={self.videoId} Error additionnalInfosURL {additionnalInfosURL} : {e}")
+            self.writelog(f"[×] idVideo={self.videoId} Error additionnalInfosURL {additionnalInfosURL} : {e}")
             self.exitProgram()
                 
         item = video_json.get('items')[0]
@@ -149,10 +149,10 @@ class Program():
             actualEndTime_object = dateutil.parser.isoparse(item.get("liveStreamingDetails").get("actualEndTime", ""))
             actualEndTime_text = actualEndTime_object.astimezone(self.tzinfo).strftime(self.dateFormats["dateString"])                   
             
-            print("start : " + actualStartTime_text)
-            self.writeresult(" (start : " + actualStartTime_text)
-            print("end : " + actualEndTime_text)
-            self.writeresult(" end : " + actualEndTime_text + ")")
+            print("début : " + actualStartTime_text)
+            self.writeresult(" (début : " + actualStartTime_text)
+            print("fin : " + actualEndTime_text)
+            self.writeresult(" fin : " + actualEndTime_text + ")")
 
         #self.writeresult("\n")
         #print(str(description))
@@ -170,7 +170,7 @@ class Program():
             if nextPageTokenComments != 0 :
                 nextPageTokenCommentsString = "&pageToken=" + nextPageTokenComments
                 
-            commentsURL = "https://www.googleapis.com/youtube/v3/commentThreads?key=" + self.youtubeKey + "&videoId=" + videoId + \
+            commentsURL = "https://www.googleapis.com/youtube/v3/commentThreads?key=" + self.youtubeKey + "&videoId=" + self.videoId + \
                           "&part=id,replies,snippet&maxResults=100" + nextPageTokenCommentsString
             print(commentsURL)
             try:
@@ -179,12 +179,12 @@ class Program():
                     commentsResponse = response.text
                     comments_json = json.loads(commentsResponse)
                 else:
-                    print(f"[×] idVideo={videoId} Response of commentsURL {commentsURL} isn't OK : {response.status_code} {response.text}")
-                    self.writelog(f"[×] idVideo={videoId} Response of commentsURL {commentsURL} isn't OK : {response.status_code} {response.text}")
+                    print(f"[×] idVideo={self.videoId} Response of commentsURL {commentsURL} isn't OK : {response.status_code} {response.text}")
+                    self.writelog(f"[×] idVideo={self.videoId} Response of commentsURL {commentsURL} isn't OK : {response.status_code} {response.text}")
                     self.exitProgram()
             except Exception as e:
-                print(f"[×] idVideo={videoId} Error commentsURL {commentsURL} : {e}")
-                self.writelog(f"[×] idVideo={videoId} Error commentsURL {commentsURL} : {e}")
+                print(f"[×] idVideo={self.videoId} Error commentsURL {commentsURL} : {e}")
+                self.writelog(f"[×] idVideo={self.videoId} Error commentsURL {commentsURL} : {e}")
                 self.exitProgram()
 
             items = comments_json.get('items')
@@ -232,8 +232,8 @@ class Program():
                 # Get replies of comment
                 # Use https://www.googleapis.com/youtube/v3/comments to get all comments
                 if snippet.get('totalReplyCount') > 0:
-                    print("*** Replies : " + str(snippet.get('totalReplyCount')) + " ***")
-                    self.writeresult("*** Replies : " + str(snippet.get('totalReplyCount')) + " ***\n")
+                    print("*** Réponses : " + str(snippet.get('totalReplyCount')) + " ***")
+                    self.writeresult("*** Réponses : " + str(snippet.get('totalReplyCount')) + " ***\n")
 
                     hasMoreReplies = True
                     nextPageTokenReplies = 0
@@ -252,12 +252,12 @@ class Program():
                                 repliesResponse = response.text
                                 replies_json = json.loads(repliesResponse)
                             else:
-                                print(f"[×] idVideo={videoId} Response of repliesURL {repliesURL} isn't OK : {response.status_code} {response.text}")
-                                self.writelog(f"[×] idVideo={videoId} Response of repliesURL {repliesURL} isn't OK : {response.status_code} {response.text}")
+                                print(f"[×] idVideo={self.videoId} Response of repliesURL {repliesURL} isn't OK : {response.status_code} {response.text}")
+                                self.writelog(f"[×] idVideo={self.videoId} Response of repliesURL {repliesURL} isn't OK : {response.status_code} {response.text}")
                                 self.exitProgram()
                         except Exception as e:
-                            print(f"[×] idVideo={videoId} Error repliesURL {repliesURL} : {e}")
-                            self.writelog(f"[×] idVideo={videoId} Error repliesURL {repliesURL} : {e}")
+                            print(f"[×] idVideo={self.videoId} Error repliesURL {repliesURL} : {e}")
+                            self.writelog(f"[×] idVideo={self.videoId} Error repliesURL {repliesURL} : {e}")
                             self.exitProgram()
 
                         items = replies_json.get('items')
@@ -326,7 +326,7 @@ class Program():
         self.clean()
 
 if __name__ == "__main__":
-    # Youtube
+   # Youtube
     urlchannel = "https://www.youtube.com/@your_channel"
     idchannel = '' # Found channel id on Youtube by clicking "Share channel" then "Copy channel ID"
     youtubeKey = '' # YouTube API Key from Google Cloud, see https://helano.github.io/help.html
