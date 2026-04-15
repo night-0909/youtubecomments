@@ -14,6 +14,7 @@ from chat_downloader.errors import (
 )
 
 import scrapetube
+from bs4 import BeautifulSoup
 import sys
 import requests, json
 from datetime import datetime
@@ -85,6 +86,15 @@ class Program():
             self.writelog(f"[×] channel={self.idchannel} Error channelInfosURL {channelInfosURL} : {e}")
             self.exitProgram()
 
+    def key_exists(self, obj, *keys: str) -> bool:
+        _obj = obj
+        try:
+            for key in keys:
+                _obj = _obj[key]
+        except (KeyError, TypeError):
+            return False
+        return True
+
     # Used when errors/exceptions occured and when we want to exit right now
     def exitProgram(self):
         self.writelog("Execution had errors")
@@ -120,6 +130,32 @@ class Program():
             for video in videos:
                 url = "https://www.youtube.com/watch?v="+str(video['videoId'])
 
+                if videotype == "videos":
+                    # Impossible to determine with scrapetube.get_channel() if a video is a Premiere
+                    # and I don't want to hit YTB API V3 /videos for each video and consume a lot of quota.
+                    # So I get this info from Youtube video page source checking presence of contents->twoColumnWatchNextResults->conversationBar in "var ytInitialData =",
+                    # meaning there was a chat
+                    try:
+                        response = requests.get(url)
+                        if response.status_code == 200:
+                            youtubeVideoResponse = response.text
+                            soup = BeautifulSoup(youtubeVideoResponse, "html.parser")
+                            script_tag = soup.find("script", string=lambda t: t and "var ytInitialData = " in t)
+                            json_text = script_tag.string.strip()[len("var ytInitialData = "):-1]
+                            data = json.loads(json_text)
+                                
+                            if self.key_exists(data, "contents", "twoColumnWatchNextResults", "conversationBar") is False:
+                                continue
+                        else:
+                            print(f"[×] idVideo={video['videoId']} Response of url {url} isn't OK : {response.status_code} {response.text}")
+                            self.writelog(f"[×] idVideo={video['videoId']} Response of url {url} isn't OK : {response.status_code} {response.text}")
+                            self.exitProgram()
+                    except Exception as e:
+                        print(f"[×] idVideo={video['videoId']} Error url {url} : {e}")
+                        self.writelog(f"[×] idVideo={video['videoId']} Error url {url} : {e}")
+                        self.exitProgram()
+                        
+                # Here, we only have streams and videos that have/had a chat
                 additionnalInfosURL = "https://www.googleapis.com/youtube/v3/videos?key=" + self.youtubeKey + "&id=" + video['videoId'] + "&part=snippet,contentDetails,liveStreamingDetails,statistics"
                 print(additionnalInfosURL)
                 try:
@@ -185,7 +221,7 @@ class Program():
                             self.writeresult("\n")
                     # List of exceptions : https://deepwiki.com/xenova/chat-downloader/6-error-handling
                     # These exceptions are not really errors (LoginRequired isn't to me as I don't want to use authentication)
-                    # If you prefer not display any error in result file, comment this block
+                    # If you prefer not display any error in result file, comment this except block
                     except (NoChatReplay, ChatDisabled, LoginRequired) as ex:
                         print(f"{ex}")
                         self.writeresult(f"{ex}")
