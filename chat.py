@@ -14,8 +14,7 @@ from chat_downloader.errors import (
 )
 
 import scrapetube
-from bs4 import BeautifulSoup
-import sys
+import sys, re
 import requests, json
 from datetime import datetime
 import dateutil.parser
@@ -131,20 +130,19 @@ class Program():
                 url = "https://www.youtube.com/watch?v="+str(video['videoId'])
 
                 if videotype == "videos":
-                    # Impossible to determine with scrapetube.get_channel() if a video is a Premiere
+                    # Impossible to determine with scrapetube.get_channel() is a video is a Premiere
                     # and I don't want to hit YTB API V3 /videos for each video and consume a lot of quota.
-                    # So I get this info from Youtube video page source checking presence of contents->twoColumnWatchNextResults->conversationBar in "var ytInitialData =",
-                    # meaning there was a chat
+                    # So I can determine wether a video has/had a chat by hitting Youtube video page source checking in var ytInitialPlayerResponse = {}
                     try:
                         response = requests.get(url)
                         if response.status_code == 200:
                             youtubeVideoResponse = response.text
-                            soup = BeautifulSoup(youtubeVideoResponse, "html.parser")
-                            script_tag = soup.find("script", string=lambda t: t and "var ytInitialData = " in t)
-                            json_text = script_tag.string.strip()[len("var ytInitialData = "):-1]
-                            data = json.loads(json_text)
-                                
-                            if self.key_exists(data, "contents", "twoColumnWatchNextResults", "conversationBar") is False:
+                            ytIniatialPlayerResponse = re.findall('ytInitialPlayerResponse\\s*=\\s*({.+?})\\s*;', response.text)[0]
+                            data = json.loads(ytIniatialPlayerResponse)
+
+                            # Ditch videos with no chat or videos with chat that are still on air
+                            if (self.key_exists(data, "microformat", "playerMicroformatRenderer", "liveBroadcastDetails") is False or
+                                data.get("microformat").get("playerMicroformatRenderer").get("liveBroadcastDetails").get("isLiveNow") is True):
                                 continue
                         else:
                             print(f"[×] idVideo={video['videoId']} Response of url {url} isn't OK : {response.status_code} {response.text}")
@@ -156,6 +154,7 @@ class Program():
                         self.exitProgram()
                         
                 # Here, we only have streams and videos that have/had a chat
+                # If you don't want to use YTB API V3, use data and search for title, dates, description, duration, liveBroadcastDetails
                 additionnalInfosURL = "https://www.googleapis.com/youtube/v3/videos?key=" + self.youtubeKey + "&id=" + video['videoId'] + "&part=snippet,contentDetails,liveStreamingDetails,statistics"
                 print(additionnalInfosURL)
                 try:
