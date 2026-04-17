@@ -8,9 +8,10 @@ comment-one_APIV3.py : extract comments of one video.<br />
 community.py : extract Posts tab (posts + comments) of a Youtube channel.<br />
 
 Modules used and some edits to do :<br />
+I use scrapetube version 2.6.0 (https://github.com/dermasmid/scrapetube) with some fixes to handle new structure and some cases that were buggy.<br />
 I use youtube-comment-downloader version 0.1.76 (https://github.com/egbertbouman/youtube-comment-downloader/) without edit I think.<br />
 I use chat_downloader version 0.2.8 (https://github.com/xenova/chat-downloader) and youtube-community-tab (https://github.com/HoloArchivists/youtube-community-tab) and made edits.<br />
 I modified some things in chat_downloader and youtube-community-tab modules, read at the top of my scripts.<br />
 
 /!\ I didn't track every changes I made, so if you want the same thing I have in my computer install these 3 packages following
-instructions in their respective repos then copy content of my youtube-comment-downloader, chat_downloader and youtube-community-tab folders.<br />
+instructions in their respective repos then copy content of my scrapetube, youtube-comment-downloader, chat_downloader and youtube-community-tab folders.<br />
