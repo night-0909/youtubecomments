@@ -233,12 +233,13 @@ def get_videos(
             # When content_type is specified (only in get_channel()), verify that channel has a Tab for content we are looking for and is the selected Tab.
             if content_type is not None:
                 tabFound = False
-                for tab in data["twoColumnBrowseResultsRenderer"]["tabs"]:
-                    # endpoint can be missing if no Home tab and /videos is scraped, with channel has no content at all
-                    if "tabRenderer" in tab and "endpoint" in tab["tabRenderer"]:
-                        if len(re.findall(tabs_url_map[content_type], tab["tabRenderer"]["endpoint"]["commandMetadata"]["webCommandMetadata"]["url"])) > 0 and tab["tabRenderer"]["selected"] is True:
-                            tabFound = True
-                            break
+                if data is not None:
+                    for tab in data["twoColumnBrowseResultsRenderer"]["tabs"]:
+                        # endpoint can be missing if no Home tab and /videos is scraped, with channel has no content at all
+                        if "tabRenderer" in tab and "endpoint" in tab["tabRenderer"]:
+                            if len(re.findall(tabs_url_map[content_type], tab["tabRenderer"]["endpoint"]["commandMetadata"]["webCommandMetadata"]["url"])) > 0 and tab["tabRenderer"]["selected"] is True:
+                                tabFound = True
+                                break
                 
                 if tabFound is False:
                     break
@@ -334,10 +335,7 @@ def get_next_data(data: dict, sort_by: str = None) -> dict:
     }
 
     return next_data
-
-def count(iter):
-    return sum(1 for _ in iter)
-    
+  
 def search_dict(partial: dict, search_key: str) -> Generator[dict, None, None]:
     stack = [partial]
     while stack:
