@@ -25,10 +25,19 @@ class Program():
         self.youtubeKey = youtubeKey
         self.tzinfo = ZoneInfo(tz)
         self.dateFormats = dateFormats
+        self.loggingfile = None
+        self.resultfile = None
         
+        self.start()
+        
+    def start(self):
         self.initLoggingFile()
+        print("Starting program")
+        self.writelog("Starting program")
+        
+        self.initChannel()
         self.initResultFile()
-            
+        
     def initLoggingFile(self):
         loggingfilename = "chat-one_" + self.idchannel
         self.loggingfile = open(loggingfilename + ".log", "a", encoding="utf-8")
@@ -69,7 +78,12 @@ class Program():
             if response.status_code == 200:
                 channelInfosResponse = response.text
                 channel_json = json.loads(channelInfosResponse)       
-                
+
+                if channel_json.get('pageInfo').get('totalResults') == 0:
+                    print(f"[×] channel={self.idchannel} Error channelInfosURL {channelInfosURL} : channel not found")
+                    self.writelog(f"[×] channel={self.idchannel} Error channelInfosURL {channelInfosURL} : channel not found")
+                    self.exitProgram()              
+              
                 item = channel_json.get('items')[0]
                 snippet = item.get('snippet')
                 handle = snippet.get('customUrl')[1:len(snippet.get('customUrl'))]
@@ -94,36 +108,38 @@ class Program():
     def clean(self):
         try:
             # Close Files
-            self.loggingfile.close()
-            self.resultfile.close()
+            if self.loggingfile is not None:
+                self.loggingfile.close()
+            if self.resultfile is not None:    
+                self.resultfile.close()
         except Exception as e:
             print("Error cleaning up : " + str(e))
-    
+            
     def main(self):
-        print("Starting program")
-        self.writelog("Starting program")
-        self.initChannel()
-
         self.writeresult("Channel " + self.urlchannel + " id : " + self.idchannel)
         self.writeresult("\n\n")
 
-        url = "https://www.youtube.com/watch?v=" + videoId
+        url = "https://www.youtube.com/watch?v=" + self.videoId
 
         # Get video information
-        additionnalInfosURL = "https://www.googleapis.com/youtube/v3/videos?key=" + self.youtubeKey + "&id=" + videoId + "&part=snippet,contentDetails,liveStreamingDetails,statistics"
+        additionnalInfosURL = "https://www.googleapis.com/youtube/v3/videos?key=" + self.youtubeKey + "&id=" + self.videoId + "&part=snippet,contentDetails,liveStreamingDetails,statistics"
         print(additionnalInfosURL)
         try:
             response = requests.get(additionnalInfosURL)
             if response.status_code == 200:
                 additionnalInfosResponse = response.text
                 video_json = json.loads(additionnalInfosResponse)
+                if video_json.get('pageInfo').get('totalResults') == 0:
+                    print(f"[×] idVideo={self.videoId} Error additionnalInfosURL {additionnalInfosURL} : video not found")
+                    self.writelog(f"[×] idVideo={self.videoId} Error additionnalInfosURL {additionnalInfosURL} : video not found")
+                    self.exitProgram()              
             else:
-                print(f"[×] idVideo={stream['videoId']} Response of additionnalInfosURL {additionnalInfosURL} isn't OK : {response.status_code} {response.text}")
-                self.writelog(f"[×] idVideo={stream['videoId']} Response of additionnalInfosURL {additionnalInfosURL} isn't OK : {response.status_code} {response.text}")
+                print(f"[×] idVideo={self.videoId} Response of additionnalInfosURL {additionnalInfosURL} isn't OK : {response.status_code} {response.text}")
+                self.writelog(f"[×] idVideo={self.videoId} Response of additionnalInfosURL {additionnalInfosURL} isn't OK : {response.status_code} {response.text}")
                 self.exitProgram()
         except Exception as e:
-            print(f"[×] idVideo={stream['videoId']} Response of additionnalInfosURL {additionnalInfosURL} isn't OK : {response.status_code} {response.text}")
-            self.writelog(f"[×] idVideo={stream['videoId']} Response of additionnalInfosURL {additionnalInfosURL} isn't OK : {response.status_code} {response.text}")
+            print(f"[×] idVideo={self.videoId} Response of additionnalInfosURL {additionnalInfosURL} isn't OK : {response.status_code} {response.text}")
+            self.writelog(f"[×] idVideo={self.videoId} Response of additionnalInfosURL {additionnalInfosURL} isn't OK : {response.status_code} {response.text}")
             self.exitProgram()
 
         item = video_json.get('items')[0]
@@ -148,10 +164,10 @@ class Program():
             print("Date : " + date)
             self.writeresult("Date : " + date)
             
-            print("start : " + item.get("liveStreamingDetails").get("actualStartTime"))
-            self.writeresult(" (start : " + item.get("liveStreamingDetails").get("actualStartTime"))
-            print("end : " + item.get("liveStreamingDetails").get("actualEndTime"))
-            self.writeresult(" end : " + item.get("liveStreamingDetails").get("actualEndTime") + ")")
+            print("début : " + item.get("liveStreamingDetails").get("actualStartTime"))
+            self.writeresult(" (début : " + item.get("liveStreamingDetails").get("actualStartTime"))
+            print("fin : " + item.get("liveStreamingDetails").get("actualEndTime"))
+            self.writeresult(" fin : " + item.get("liveStreamingDetails").get("actualEndTime") + ")")
             
             self.writeresult("\n")
             print(durationString)
@@ -167,14 +183,14 @@ class Program():
             # List of exceptions : https://deepwiki.com/xenova/chat-downloader/6-error-handling
             # These exceptions are not really errors (LoginRequired isn't to me as I don't want to use authentication)
             # If you prefer not display any error in result file, comment this block
-            except (NoChatReplay, ChatDisabled, LoginRequired) as ex:
+            except (NoChatReplay, ChatDisabled, LoginRequired, VideoUnplayable) as ex:
                 print(f"{ex}")
                 self.writeresult(f"{ex}")
                 self.writeresult("\n")
             # These are errors
             except Exception as ex:
-                print(f"[×] idVideo={stream['videoId']} Error writing chat : {ex}")
-                self.writelog(f"[×] idVideo={stream['videoId']} Error writing chat : {ex}")
+                print(f"[×] idVideo={self.videoId} Error writing chat : {ex}")
+                self.writelog(f"[×] idVideo={self.videoId} Error writing chat : {ex}")
                 self.exitProgram()
                
             self.writeresult("\n")

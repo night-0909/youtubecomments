@@ -15,8 +15,17 @@ class Program():
         self.youtubeKey = youtubeKey
         self.tzinfo = ZoneInfo(tz)
         self.dateFormats = dateFormats
+        self.loggingfile = None
+        self.resultfile = None
         
+        self.start()
+        
+    def start(self):
         self.initLoggingFile()
+        print("Starting program")
+        self.writelog("Starting program")
+        
+        self.initChannel()
         self.initResultFile()
             
     def initLoggingFile(self):
@@ -60,6 +69,11 @@ class Program():
                 channelInfosResponse = response.text
                 channel_json = json.loads(channelInfosResponse)       
                 
+                if channel_json.get('pageInfo').get('totalResults') == 0:
+                    print(f"[×] channel={self.idchannel} Error channelInfosURL {channelInfosURL} : channel not found")
+                    self.writelog(f"[×] channel={self.idchannel} Error channelInfosURL {channelInfosURL} : channel not found")
+                    self.exitProgram()                
+                
                 item = channel_json.get('items')[0]
                 snippet = item.get('snippet')
                 handle = snippet.get('customUrl')[1:len(snippet.get('customUrl'))]
@@ -75,25 +89,23 @@ class Program():
 
     # Used when errors/exceptions occured and when we want to exit right now
     def exitProgram(self):
-            self.writelog("Execution had errors")
-            self.writelog("Ending program")
-            self.clean()
-            sys.exit(1)
+        self.writelog("Execution had errors")
+        self.writelog("Ending program")
+        self.clean()
+        sys.exit(1)
     
     # Used at the end of program without errors/exceptions and when errors/exception occured
     def clean(self):
         try:
             # Close Files
-            self.loggingfile.close()
-            self.resultfile.close()
+            if self.loggingfile is not None:
+                self.loggingfile.close()
+            if self.resultfile is not None:    
+                self.resultfile.close()
         except Exception as e:
             print("Error cleaning up : " + str(e))
     
     def main(self):
-        print("Starting program")
-        self.writelog("Starting program")
-        self.initChannel()
-
         self.writeresult("Channel " + self.urlchannel + " id : " + self.idchannel)
         self.writeresult("\n\n")
         
@@ -158,10 +170,10 @@ class Program():
                     actualEndTime_object = dateutil.parser.isoparse(item.get("liveStreamingDetails").get("actualEndTime", ""))
                     actualEndTime_text = actualEndTime_object.astimezone(self.tzinfo).strftime(self.dateFormats["dateString"])                   
                     
-                    print("start : " + actualStartTime_text)
-                    self.writeresult(" (start : " + actualStartTime_text)
-                    print("end : " + actualEndTime_text)
-                    self.writeresult(" end : " + actualEndTime_text + ")")
+                    print("début : " + actualStartTime_text)
+                    self.writeresult(" (début : " + actualStartTime_text)
+                    print("fin : " + actualEndTime_text)
+                    self.writeresult(" fin : " + actualEndTime_text + ")")
                     
                 #self.writeresult("\n")
                 #print(str(description))

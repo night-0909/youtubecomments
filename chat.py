@@ -10,6 +10,7 @@ from chat_downloader.errors import (
     ChatDisabled,
     NoChatReplay,
     LoginRequired,
+    VideoUnplayable,
     ChatDownloaderError
 )
 
@@ -27,10 +28,19 @@ class Program():
         self.youtubeKey = youtubeKey
         self.tzinfo = ZoneInfo(tz)
         self.dateFormats = dateFormats
-        
-        self.initLoggingFile()
-        self.initResultFile()
+        self.loggingfile = None
+        self.resultfile = None
             
+        self.start()
+        
+    def start(self):
+        self.initLoggingFile()
+        print("Starting program")
+        self.writelog("Starting program")
+        
+        self.initChannel()
+        self.initResultFile()
+    
     def initLoggingFile(self):
         loggingfilename = "chat_" + self.idchannel
         self.loggingfile = open(loggingfilename + ".log", "a", encoding="utf-8")
@@ -70,7 +80,12 @@ class Program():
             response = requests.get(channelInfosURL)
             if response.status_code == 200:
                 channelInfosResponse = response.text
-                channel_json = json.loads(channelInfosResponse)       
+                channel_json = json.loads(channelInfosResponse)
+
+                if channel_json.get('pageInfo').get('totalResults') == 0:
+                    print(f"[×] channel={self.idchannel} Error channelInfosURL {channelInfosURL} : channel not found")
+                    self.writelog(f"[×] channel={self.idchannel} Error channelInfosURL {channelInfosURL} : channel not found")
+                    self.exitProgram()
                 
                 item = channel_json.get('items')[0]
                 snippet = item.get('snippet')
@@ -85,14 +100,17 @@ class Program():
             self.writelog(f"[×] channel={self.idchannel} Error channelInfosURL {channelInfosURL} : {e}")
             self.exitProgram()
 
-    def key_exists(self, obj, *keys: str) -> bool:
-        _obj = obj
-        try:
-            for key in keys:
-                _obj = _obj[key]
-        except (KeyError, TypeError):
-            return False
-        return True
+    def safely_get_value_from_key(self, *args, default=None):
+        obj = args[0]
+        keys = args[1:]
+
+        for key in keys:
+            try:
+                obj = obj[key]
+            except Exception:
+                return default
+
+        return obj        
 
     # Used when errors/exceptions occured and when we want to exit right now
     def exitProgram(self):
@@ -105,16 +123,14 @@ class Program():
     def clean(self):
         try:
             # Close Files
-            self.loggingfile.close()
-            self.resultfile.close()
+            if self.loggingfile is not None:
+                self.loggingfile.close()
+            if self.resultfile is not None:    
+                self.resultfile.close()
         except Exception as e:
             print("Error cleaning up : " + str(e))
     
     def main(self):
-        print("Starting program")
-        self.writelog("Starting program")
-        self.initChannel()
-
         self.writeresult("Channel " + self.urlchannel + " id : " + self.idchannel)
         self.writeresult("\n\n")
 
@@ -130,7 +146,7 @@ class Program():
                 url = "https://www.youtube.com/watch?v="+str(video['videoId'])
 
                 if videotype == "videos":
-                    # Impossible to determine with scrapetube.get_channel() is a video is a Premiere
+                    # Impossible to determine with scrapetube.get_channel() if a video is a Premiere
                     # and I don't want to hit YTB API V3 /videos for each video and consume a lot of quota.
                     # So I can determine wether a video has/had a chat by hitting Youtube video page source checking in var ytInitialPlayerResponse = {}
                     try:
@@ -141,8 +157,8 @@ class Program():
                             data = json.loads(ytIniatialPlayerResponse)
 
                             # Ditch videos with no chat or videos with chat that are still on air
-                            if (self.key_exists(data, "microformat", "playerMicroformatRenderer", "liveBroadcastDetails") is False or
-                                data.get("microformat").get("playerMicroformatRenderer").get("liveBroadcastDetails").get("isLiveNow") is True):
+                            liveBroadcastDetails = self.safely_get_value_from_key(data, "microformat", "playerMicroformatRenderer", "liveBroadcastDetails")
+                            if liveBroadcastDetails is None or liveBroadcastDetails.get("isLiveNow") is True:
                                 continue
                         else:
                             print(f"[×] idVideo={video['videoId']} Response of url {url} isn't OK : {response.status_code} {response.text}")
@@ -219,9 +235,9 @@ class Program():
                             self.writeresult(chat.format(message))
                             self.writeresult("\n")
                     # List of exceptions : https://deepwiki.com/xenova/chat-downloader/6-error-handling
-                    # These exceptions are not really errors (LoginRequired isn't to me as I don't want to use authentication)
+                    # These exceptions are not really errors (LoginRequired isn't to me as I don't want to use authentication, VideoUnplayable for members-only content)
                     # If you prefer not display any error in result file, comment this except block
-                    except (NoChatReplay, ChatDisabled, LoginRequired) as ex:
+                    except (NoChatReplay, ChatDisabled, LoginRequired, VideoUnplayable) as ex:
                         print(f"{ex}")
                         self.writeresult(f"{ex}")
                         self.writeresult("\n")

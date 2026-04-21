@@ -21,8 +21,17 @@ class Program():
         self.youtubeKey = youtubeKey
         self.tzinfo = ZoneInfo(tz)
         self.dateFormats = dateFormats
+        self.loggingfile = None
+        self.resultfile = None
         
+        self.start()
+        
+    def start(self):
         self.initLoggingFile()
+        print("Starting program")
+        self.writelog("Starting program")
+        
+        self.initChannel()
         self.initResultFile()
             
     def initLoggingFile(self):
@@ -65,6 +74,11 @@ class Program():
             if response.status_code == 200:
                 channelInfosResponse = response.text
                 channel_json = json.loads(channelInfosResponse)       
+
+                if channel_json.get('pageInfo').get('totalResults') == 0:
+                    print(f"[×] channel={self.idchannel} Error channelInfosURL {channelInfosURL} : channel not found")
+                    self.writelog(f"[×] channel={self.idchannel} Error channelInfosURL {channelInfosURL} : channel not found")
+                    self.exitProgram()
                 
                 item = channel_json.get('items')[0]
                 snippet = item.get('snippet')
@@ -90,8 +104,10 @@ class Program():
     def clean(self):
         try:
             # Close Files
-            self.loggingfile.close()
-            self.resultfile.close()
+            if self.loggingfile is not None:
+                self.loggingfile.close()
+            if self.resultfile is not None:    
+                self.resultfile.close()
         except Exception as e:
             print("Error cleaning up : " + str(e))
 
@@ -128,10 +144,6 @@ class Program():
         return newlistcomments
      
     def main(self):
-        print("Starting program")
-        self.writelog("Starting program")
-        self.initChannel()
-
         self.writeresult("Channel " + self.urlchannel + " id : " + self.idchannel)
         self.writeresult("\n\n")
 
@@ -154,6 +166,7 @@ class Program():
             print(url)
             self.writeresult(url)
             self.writeresult("\n")
+            # We remove (edited) and shared in published_time_text in order to transform published_time_text in date
             datePost = datetime.fromtimestamp(dateparser.parse(post.published_time_text.replace('shared ', '').split('(')[0].strip()).timestamp(), self.tzinfo).strftime(self.dateFormats['dateString'])
             self.writeresult("Date : " + datePost)
             self.writeresult("\n")
@@ -178,13 +191,14 @@ class Program():
 
             # Cited post
             if post.original_post is not None:
+                # We remove (edited) and shared in published_time_text in order to transform published_time_text in date
                 datePostOrigin = datetime.fromtimestamp(dateparser.parse(post.original_post.published_time_text.replace('shared ', '').split('(')[0].strip()).timestamp(), self.tzinfo).strftime(self.dateFormats['dateString'])
-                self.writeresult("\n\Original post :\n")
+                self.writeresult("\n\nPost d'origine :\n")
                 self.writeresult("URL : " + "https://youtube.com/post/" + post.original_post.post_id)
                 self.writeresult("\n")
-                self.writeresult("Date original post : " + datePostOrigin)
+                self.writeresult("Date post d'origine : " + datePostOrigin)
                 self.writeresult("\n")
-                self.writeresult("Author : " + post.original_post.author["authorEndpoint"]["url"][1:len(post.original_post.author["authorEndpoint"]["url"])] +
+                self.writeresult("Auteur : " + post.original_post.author["authorEndpoint"]["url"][1:len(post.original_post.author["authorEndpoint"]["url"])] +
                         " (" + post.original_post.channel_id + ")")
                 self.writeresult("\n")
 
@@ -216,8 +230,8 @@ class Program():
                     self.writeresult("\n")
 
                     if comment['replies'] != "":
-                        print("*** Replies : " + comment['replies'] + " ***\n")
-                        self.writeresult("*** Replies : " + comment['replies'] + " ***\n")
+                        print("*** Réponses : " + comment['replies'] + " ***\n")
+                        self.writeresult("*** Réponses : " + comment['replies'] + " ***\n")
                         lastParentReplies = idComment
                         for reply in comment['repliesList']:
                             date = datetime.fromtimestamp(reply['time_parsed'])
@@ -229,7 +243,7 @@ class Program():
 
                         self.writeresult("\n")
             
-            # Add new line for next parentComment
+            # Add new line for next parentComment // TO VERIFY : is there some cases where we don't want to add new line, eg end of comments ?
             if lastParentReplies != idComment:
                 self.writeresult("\n")
             
