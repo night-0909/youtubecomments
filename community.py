@@ -1,12 +1,5 @@
 # -*- encoding: utf-8 -*-
 
-# Community Posts : https://github.com/HoloArchivists/youtube-community-tab
-# I made some changes in :
-# helpers\clean_items.py : see function def clean_backstage_attachment(attachment) :
-# post.py : see function def from_data(post_data):
-
-# Comments https://github.com/egbertbouman/youtube-comment-downloader/
-
 from youtube_community_tab.community_tab import CommunityTab
 from youtube_comment_downloader import *
 import requests, json, sys
@@ -15,11 +8,12 @@ import dateparser
 from zoneinfo import ZoneInfo
 
 class Program():
-    def __init__(self, idchannel, urlchannel, youtubeKey, tz, dateFormats):
+    def __init__(self, idchannel, urlchannel, youtubeKey, tz, output_dirs, dateFormats):
         self.idchannel = idchannel
         self.urlchannel = urlchannel
         self.youtubeKey = youtubeKey
         self.tzinfo = ZoneInfo(tz)
+        self.output_dirs = output_dirs
         self.dateFormats = dateFormats
         self.loggingfile = None
         self.resultfile = None
@@ -35,13 +29,21 @@ class Program():
         self.initResultFile()
             
     def initLoggingFile(self):
-        loggingfilename = "community_" + self.idchannel
-        self.loggingfile = open(loggingfilename + ".log", "a", encoding="utf-8")
+        loggingfilename = self.output_dirs['log_file'] + "community_" + self.idchannel + ".log"
+        try:
+            self.loggingfile = open(loggingfilename, "a", encoding="utf-8")
+        except Exception as e:
+            print(e)
+            self.exitProgram()
     
     def initResultFile(self):
         dateNow = self.getDateNow()
-        resultfilename = "community_" + self.idchannel + "_" + dateNow['dateFileString'] + ".txt"
-        self.resultfile = open(resultfilename, "w", encoding="utf-8")
+        resultfilename = self.output_dirs['result_file'] + "community_" + self.idchannel + "_" + dateNow['dateFileString'] +  ".txt"
+        try:
+            self.resultfile = open(resultfilename, "w", encoding="utf-8")
+        except Exception as e:
+            print(e)
+            self.exitProgram()
     
     def getDateNow(self):
         timestamp_now = datetime.now().timestamp()
@@ -95,8 +97,12 @@ class Program():
 
     # Used when errors/exceptions occured and when we want to exit right now
     def exitProgram(self):
-        self.writelog("Execution had errors")
-        self.writelog("Ending program")
+        try:
+            self.writelog("Execution had errors")
+            self.writelog("Ending program")
+        except Exception as e:
+            print(e)
+
         self.clean()
         sys.exit(1)
     
@@ -144,23 +150,34 @@ class Program():
         return newlistcomments
      
     def main(self):
+        self.writelog("Channel " + self.urlchannel + " id : " + self.idchannel)
         self.writeresult("Channel " + self.urlchannel + " id : " + self.idchannel)
         self.writeresult("\n\n")
 
         # Cache expiration
         EXPIRATION_TIME = 1 * 60 * 60
 
-        ct = CommunityTab(self.idchannel)
-        ct.load_posts(expire_after=EXPIRATION_TIME)
-
-        # Load more posts
-        while(ct.posts_continuation_token):
+        try:
+            ct = CommunityTab(self.idchannel)
             ct.load_posts(expire_after=EXPIRATION_TIME)
-            #if (len(ct.posts) > 80):
-                #break
 
-        print(str(len(ct.posts))+ " posts")
+            # Load more posts
+            while(ct.posts_continuation_token):
+                ct.load_posts(expire_after=EXPIRATION_TIME)
+                #if (len(ct.posts) > 80):
+                    #break
+        except Exception as e:
+            print(f"[×] channel={self.idchannel} Error getting posts from Posts tab : {e}")
+            self.writelog(f"[×] channel={self.idchannel} Error getting posts from Posts tab : {e}")
+            self.exitProgram()            
 
+        num_posts = len(ct.posts)
+        print(f"Posts : {num_posts}")
+        self.writelog(f"Posts : {num_posts}")
+        self.writeresult(f"Posts : {num_posts}")
+        self.writeresult("\n\n")
+
+        num_posts_processed = 0
         for post in ct.posts:
             url = "https://youtube.com/post/" + post.post_id
             print(url)
@@ -250,6 +267,11 @@ class Program():
             # No comment, we add two newlines
             if lastParentReplies == 0 and idComment == 0:
                 self.writeresult("\n\n")
+                
+            num_posts_processed = num_posts_processed + 1
+
+        print(f"Processed : {num_posts_processed}")
+        self.writelog(f"Processed : {num_posts_processed}")            
 
         print("Execution was OK")
         self.writelog("Execution was OK")
@@ -258,6 +280,10 @@ class Program():
         self.clean()
 
 if __name__ == "__main__":
+    # Paths
+    output_dirs = {'log_file': "",
+                   'result_file': ""
+    }    
     # Youtube
     urlchannel = "https://www.youtube.com/@your_channel"
     idchannel = '' # Found channel id on Youtube by clicking "Share channel" then "Copy channel ID"
@@ -267,5 +293,6 @@ if __name__ == "__main__":
     dateFormats = {"dateString": "%d/%m/%Y %H:%M:%S", "dateDBString": "%Y-%m-%d %H:%M:%S", "dateFileString": "%d%m%Y%H%M%S"}
 
     # Launch
-    program = Program(idchannel, urlchannel, youtubeKey, tz, dateFormats)
+    program = Program(idchannel, urlchannel, youtubeKey, tz, output_dirs, dateFormats)
     program.main()
+

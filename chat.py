@@ -1,10 +1,5 @@
 # -*- encoding: utf-8 -*-
 
-# I made some changes in chat_downloader module :
-# formatting\format.py I added tz : value = microseconds_to_timestamp(value, formatting, tz)
-# utils\core.py I added tz info : see function def microseconds_to_timestamp(microseconds, format='%Y-%m-%d %H:%M:%S'):
-# formatting\custom_formats.json I added author id : "template": "{time_text|timestamp}{author.badges}{money.text}{author.display_name|author.name} ({author.id}){message}",
-
 from chat_downloader import ChatDownloader
 from chat_downloader.errors import (
     ChatDisabled,
@@ -22,11 +17,12 @@ import dateutil.parser
 from zoneinfo import ZoneInfo
 
 class Program():
-    def __init__(self, idchannel, urlchannel, youtubeKey, tz, dateFormats):
+    def __init__(self, idchannel, urlchannel, youtubeKey, tz, output_dirs, dateFormats):
         self.idchannel = idchannel
         self.urlchannel = urlchannel
         self.youtubeKey = youtubeKey
         self.tzinfo = ZoneInfo(tz)
+        self.output_dirs = output_dirs
         self.dateFormats = dateFormats
         self.loggingfile = None
         self.resultfile = None
@@ -40,15 +36,23 @@ class Program():
         
         self.initChannel()
         self.initResultFile()
-    
+
     def initLoggingFile(self):
-        loggingfilename = "chat_" + self.idchannel
-        self.loggingfile = open(loggingfilename + ".log", "a", encoding="utf-8")
+        loggingfilename = self.output_dirs['log_file'] + "chat_" + self.idchannel + ".log"
+        try:
+            self.loggingfile = open(loggingfilename, "a", encoding="utf-8")
+        except Exception as e:
+            print(e)
+            self.exitProgram()
     
     def initResultFile(self):
         dateNow = self.getDateNow()
-        resultfilename = "chat_" + self.idchannel + "_" + dateNow['dateFileString'] +  ".txt"
-        self.resultfile = open(resultfilename, "w", encoding="utf-8")
+        resultfilename = self.output_dirs['result_file'] + "chat_" + self.idchannel + "_" + dateNow['dateFileString'] +  ".txt"
+        try:
+            self.resultfile = open(resultfilename, "w", encoding="utf-8")
+        except Exception as e:
+            print(e)
+            self.exitProgram()
     
     def getDateNow(self):
         timestamp_now = datetime.now().timestamp()
@@ -114,8 +118,12 @@ class Program():
 
     # Used when errors/exceptions occured and when we want to exit right now
     def exitProgram(self):
-        self.writelog("Execution had errors")
-        self.writelog("Ending program")
+        try:
+            self.writelog("Execution had errors")
+            self.writelog("Ending program")
+        except Exception as e:
+            print(e)
+
         self.clean()
         sys.exit(1)
     
@@ -131,18 +139,23 @@ class Program():
             print("Error cleaning up : " + str(e))
     
     def main(self):
+        self.writelog("Channel " + self.urlchannel + " id : " + self.idchannel)
         self.writeresult("Channel " + self.urlchannel + " id : " + self.idchannel)
         self.writeresult("\n\n")
 
         # Get all url streams and Premiere videos
         videostypes = ["streams", "videos"]
         for videotype in videostypes :
-            print("Type : " + videotype)
-            self.writeresult("Type : " + videotype)
+            num_videos_processed = 0
+            videos = scrapetube.get_channel(channel_id=self.idchannel, content_type=videotype, sort_by="newest")
+            videosList = list(videos)
+            num_videosList = len(videosList)
+            print(f"Type : {videotype} (total : {num_videosList})")
+            self.writelog(f"Type : {videotype} (total : {num_videosList})")
+            self.writeresult(f"Type : {videotype} (total : {num_videosList})")
             self.writeresult("\n\n")
             
-            videos = scrapetube.get_channel(channel_id=self.idchannel, content_type=videotype, sort_by="newest")
-            for video in videos:
+            for video in videosList:
                 url = "https://www.youtube.com/watch?v="+str(video['videoId'])
 
                 if videotype == "videos":
@@ -248,6 +261,10 @@ class Program():
                         self.exitProgram()
 
                     self.writeresult("\n")
+                    num_videos_processed = num_videos_processed + 1
+
+            print(f"Processed : {num_videos_processed}")
+            self.writelog(f"Processed : {num_videos_processed}")
             
         print("Execution was OK")
         self.writelog("Execution was OK")
@@ -256,6 +273,10 @@ class Program():
         self.clean()
 
 if __name__ == "__main__":
+    # Paths
+    output_dirs = {'log_file': "",
+                'result_file': ""
+    }
     # Youtube
     urlchannel = "https://www.youtube.com/@your_channel"
     idchannel = '' # Found channel id on Youtube by clicking "Share channel" then "Copy channel ID"
@@ -265,6 +286,6 @@ if __name__ == "__main__":
     dateFormats = {"dateString": "%d/%m/%Y %H:%M:%S", "dateDBString": "%Y-%m-%d %H:%M:%S", "dateFileString": "%d%m%Y%H%M%S"}
 
     # Launch
-    program = Program(idchannel, urlchannel, youtubeKey, tz, dateFormats)
+    program = Program(idchannel, urlchannel, youtubeKey, tz, output_dirs, dateFormats)
     program.main()
     
