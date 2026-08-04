@@ -8,9 +8,8 @@ from chat_downloader.errors import (
     VideoUnplayable,
     ChatDownloaderError
 )
-
 import scrapetube
-import sys, re
+import sys, re, time
 import requests, json
 from datetime import datetime
 import dateutil.parser
@@ -162,12 +161,17 @@ class Program():
                     # Impossible to determine with scrapetube.get_channel() if a video is a Premiere
                     # and I don't want to hit YTB API V3 /videos for each video and consume a lot of quota.
                     # So I can determine wether a video has/had a chat by hitting Youtube video page source checking in var ytInitialPlayerResponse = {}
+                    time.sleep(1)
                     try:
-                        response = requests.get(url)
+                        # To avoid consent popup showing off when calling response = requests.get(url), we set a cookie to "Accept all" :
+                        # See yt-dlp, streamlink, chat_downloader, youtube_community_tab (see ytct.py)
+                        jar = requests.cookies.RequestsCookieJar()
+                        jar.set('SOCS', 'CAI', domain='.youtube.com', secure=True) # CAI means "accept all"
+                        response = requests.get(url, cookies=jar)
                         if response.status_code == 200:
                             youtubeVideoResponse = response.text
-                            ytIniatialPlayerResponse = re.findall('ytInitialPlayerResponse\\s*=\\s*({.+?})\\s*;', response.text)[0]
-                            data = json.loads(ytIniatialPlayerResponse)
+                            ytInitialPlayerResponse = re.findall('ytInitialPlayerResponse\\s*=\\s*({.+?})\\s*;', response.text)[0]
+                            data = json.loads(ytInitialPlayerResponse)
 
                             # Ditch videos with no chat or videos with chat that are still on air
                             liveBroadcastDetails = self.safely_get_value_from_key(data, "microformat", "playerMicroformatRenderer", "liveBroadcastDetails")
@@ -209,7 +213,7 @@ class Program():
                 description = snippet.get('description')
 
                 contentDetails = item.get('contentDetails')
-                duration = contentDetails.get('duration')
+                duration = contentDetails.get('duration', '')
                 durationString = duration[2:len(duration)]
 
                 # Check if video is ended. Because some videos can be scheduled and chat is on with messages, for this case video don't have start and endtime.
@@ -218,8 +222,8 @@ class Program():
                     print(url)
                     self.writeresult(url)
                     self.writeresult("\n")
-                    print(title)
-                    self.writeresult(title)
+                    print("Title : " + title)
+                    self.writeresult("Title : " + title)
                     self.writeresult("\n")
                     print("Date : " + dateVideo_text)
                     self.writeresult("Date : " + dateVideo_text)
@@ -234,12 +238,16 @@ class Program():
                     self.writeresult(" end : " + actualEndTime_text + ")")
                     
                     self.writeresult("\n")
-                    print(durationString)
-                    self.writeresult(durationString)
+                    print("Duration : " + durationString)
+                    self.writeresult("Duration : " + durationString)
                     self.writeresult("\n")
                     #print(str(description))
                     #self.writeresult(str(description))
                     #self.writeresult("\n")
+                    
+                    print("Chat :")
+                    self.writeresult("Chat :")
+                    self.writeresult("\n")
 
                     try:
                         chat = ChatDownloader().get_chat(url)       # create a generator

@@ -170,35 +170,57 @@ class Program():
                 description = snippet.get('description')
 
                 contentDetails = item.get('contentDetails')
-                duration = contentDetails.get('duration')
+                duration = contentDetails.get('duration', '')
                 durationString = duration[2:len(duration)]
 
                 self.writeresult("\n")
-                print(title)
-                self.writeresult(title)
+                print("Title : " + title)
+                self.writeresult("Title : " + title)
                 self.writeresult("\n")
                 print("Date : " + dateVideo_text)
                 self.writeresult("Date : " + dateVideo_text)
-
-                # Warning : somes lives are scheduled but still have chat messages and comments, so no start and end time for them
+               
+                # Get liveStreamingDetails infos
                 if "liveStreamingDetails" in item:
-                    actualStartTime_object = dateutil.parser.isoparse(item.get("liveStreamingDetails").get("actualStartTime", ""))
-                    actualStartTime_text = actualStartTime_object.astimezone(self.tzinfo).strftime(self.dateFormats["dateString"])                   
-                    actualEndTime_object = dateutil.parser.isoparse(item.get("liveStreamingDetails").get("actualEndTime", ""))
-                    actualEndTime_text = actualEndTime_object.astimezone(self.tzinfo).strftime(self.dateFormats["dateString"])                   
-                    
-                    print("début : " + actualStartTime_text)
-                    self.writeresult(" (début : " + actualStartTime_text)
-                    print("fin : " + actualEndTime_text)
-                    self.writeresult(" fin : " + actualEndTime_text + ")")
+                    if snippet.get("liveBroadcastContent") == "none":                    
+                        actualStartTime_object = dateutil.parser.isoparse(item.get("liveStreamingDetails").get("actualStartTime", ""))
+                        actualStartTime_text = actualStartTime_object.astimezone(self.tzinfo).strftime(self.dateFormats["dateString"])
+                        actualEndTime_object = dateutil.parser.isoparse(item.get("liveStreamingDetails").get("actualEndTime", ""))
+                        actualEndTime_text = actualEndTime_object.astimezone(self.tzinfo).strftime(self.dateFormats["dateString"])
+
+                        print("start : " + actualStartTime_text)
+                        self.writeresult(" (start : " + actualStartTime_text)
+                        print("end : " + actualEndTime_text)
+                        self.writeresult(" end : " + actualEndTime_text + ")")
+                    elif snippet.get("liveBroadcastContent") == "live":
+                        actualStartTime_object = dateutil.parser.isoparse(item.get("liveStreamingDetails").get("actualStartTime", ""))
+                        actualStartTime_text = actualStartTime_object.astimezone(self.tzinfo).strftime(self.dateFormats["dateString"])
+                        actualEndTime_text = "live"
+                        durationString = "None"
+
+                        print("start : " + actualStartTime_text)
+                        self.writeresult(" (start : " + actualStartTime_text)
+                        print("end : " + actualEndTime_text)
+                        self.writeresult(" end : " + actualEndTime_text + ")")
+                    elif snippet.get("liveBroadcastContent") == "upcoming":
+                        actualscheduledStartTime_object = dateutil.parser.isoparse(item.get("liveStreamingDetails").get("scheduledStartTime", ""))
+                        actualscheduledStartTime_text = actualscheduledStartTime_object.astimezone(self.tzinfo).strftime(self.dateFormats["dateString"])
+                        durationString = "None"
+
+                        print("scheduled : " + actualscheduledStartTime_text)
+                        self.writeresult(" (scheduled : " + actualscheduledStartTime_text + ")")                    
                     
                 #self.writeresult("\n")
                 #print(str(description))
                 #self.writeresult(str(description))                
                 self.writeresult("\n")
-                print(durationString)
-                self.writeresult(durationString)
-                  
+                print("Duration : " + durationString)
+                self.writeresult("Duration : " + durationString)
+                self.writeresult("\n")
+                
+                print("Comments :")
+                self.writeresult("Comments :")
+                 
                 # Get comments
                 hasMoreComments = True
                 nextPageTokenComments = 0

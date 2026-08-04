@@ -1,20 +1,16 @@
 # -*- encoding: utf-8 -*-
 
-# I made some changes in chat_downloader module :
-# formatting\format.py I added tz : value = microseconds_to_timestamp(value, formatting, tz)
-# utils\core.py I added tz info : see function def microseconds_to_timestamp(microseconds, format='%Y-%m-%d %H:%M:%S'):
-# formatting\custom_formats.json I added author id : "template": "{time_text|timestamp}{author.badges}{money.text}{author.display_name|author.name} ({author.id}){message}",
-
 from chat_downloader import ChatDownloader
 from chat_downloader.errors import (
     ChatDisabled,
     NoChatReplay,
     LoginRequired,
+    VideoUnplayable,
     ChatDownloaderError
 )
-import scrapetube
 import sys, requests, json
 from datetime import datetime
+import dateutil.parser
 from zoneinfo import ZoneInfo
 
 class Program():
@@ -144,15 +140,17 @@ class Program():
 
         item = video_json.get('items')[0]
         snippet = item.get('snippet')
-        date = snippet.get('publishedAt')
+        dateVideo = snippet.get('publishedAt')
+        dateVideo_object = dateutil.parser.isoparse(dateVideo)
+        dateVideo_text = dateVideo_object.astimezone(self.tzinfo).strftime(self.dateFormats['dateString'])
         title = snippet.get('title')
         description = snippet.get('description')
 
         contentDetails = item.get('contentDetails')
-        duration = contentDetails.get('duration')
+        duration = contentDetails.get('duration', '')
         durationString = duration[2:len(duration)]
 
-        # Check if live is ended. Because some lives can be scheduled and chat is on with messages, for this case live don't have start and endtime.
+        # Check if video is ended. Because some videos can be scheduled and chat is on with messages, for this case video don't have start and endtime.
         # liveBroadcastContent is "upcoming" if scheduled and will be "live" when on and none I guess when done. So we check "none"
         if "liveStreamingDetails" in item and snippet.get("liveBroadcastContent") == "none":
             print(url)
@@ -161,18 +159,25 @@ class Program():
             print(title)
             self.writeresult(title)
             self.writeresult("\n")
-            print("Date : " + date)
-            self.writeresult("Date : " + date)
+            print("Date : " + dateVideo_text)
+            self.writeresult("Date : " + dateVideo_text)
             
-            print("début : " + item.get("liveStreamingDetails").get("actualStartTime"))
-            self.writeresult(" (début : " + item.get("liveStreamingDetails").get("actualStartTime"))
-            print("fin : " + item.get("liveStreamingDetails").get("actualEndTime"))
-            self.writeresult(" fin : " + item.get("liveStreamingDetails").get("actualEndTime") + ")")
+            actualStartTime_object = dateutil.parser.isoparse(item.get("liveStreamingDetails").get("actualStartTime", ""))
+            actualStartTime_text = actualStartTime_object.astimezone(self.tzinfo).strftime(self.dateFormats['dateString'])
+            actualEndTime_object = dateutil.parser.isoparse(item.get("liveStreamingDetails").get("actualEndTime", ""))
+            actualEndTime_text = actualEndTime_object.astimezone(self.tzinfo).strftime(self.dateFormats['dateString'])                                  
+            print("start : " + actualStartTime_text)
+            self.writeresult(" (start : " + actualStartTime_text)
+            print("end : " + actualEndTime_text)
+            self.writeresult(" end : " + actualEndTime_text + ")")
             
             self.writeresult("\n")
-            print(durationString)
-            self.writeresult(durationString)
+            print("Duration : " + durationString)
+            self.writeresult("Duration : " + durationString)
             self.writeresult("\n")
+            #print(str(description))
+            #self.writeresult(str(description))
+            #self.writeresult("\n")
 
             try:
                 chat = ChatDownloader().get_chat(url)       # create a generator
@@ -181,18 +186,18 @@ class Program():
                     self.writeresult(chat.format(message))
                     self.writeresult("\n")
             # List of exceptions : https://deepwiki.com/xenova/chat-downloader/6-error-handling
-            # These exceptions are not really errors (LoginRequired isn't to me as I don't want to use authentication)
-            # If you prefer not display any error in result file, comment this block
+            # These exceptions are not really errors (LoginRequired isn't to me as I don't want to use authentication, VideoUnplayable for members-only content)
+            # If you prefer not display any error in result file, comment this except block
             except (NoChatReplay, ChatDisabled, LoginRequired, VideoUnplayable) as ex:
                 print(f"{ex}")
                 self.writeresult(f"{ex}")
                 self.writeresult("\n")
             # These are errors
             except Exception as ex:
-                print(f"[×] idVideo={self.videoId} Error writing chat : {ex}")
-                self.writelog(f"[×] idVideo={self.videoId} Error writing chat : {ex}")
+                print(f"[×] idVideo={video['videoId']} Error writing chat : {ex}")
+                self.writelog(f"[×] idVideo={video['videoId']} Error writing chat : {ex}")
                 self.exitProgram()
-               
+
             self.writeresult("\n")
 
         print("Execution was OK")
