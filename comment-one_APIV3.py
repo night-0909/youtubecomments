@@ -272,8 +272,8 @@ class Program():
                 # Get replies of comment
                 # Use https://www.googleapis.com/youtube/v3/comments to get all comments
                 if snippet.get('totalReplyCount') > 0:
-                    print("*** Réponses : " + str(snippet.get('totalReplyCount')) + " ***")
-                    self.writeresult("*** Réponses : " + str(snippet.get('totalReplyCount')) + " ***\n")
+                    print("*** Replies : " + str(snippet.get('totalReplyCount')) + " ***")
+                    self.writeresult("*** Replies : " + str(snippet.get('totalReplyCount')) + " ***\n")
 
                     hasMoreReplies = True
                     nextPageTokenReplies = 0

@@ -188,6 +188,9 @@ class Program():
             self.writeresult("Date : " + datePost)
             self.writeresult("\n")
             
+            self.writeresult("Text :")
+            self.writeresult("\n")
+            
             if "runs" in post.content_text:
                 print(post.content_text["runs"])
                 for elt in post.content_text["runs"]:
@@ -210,14 +213,17 @@ class Program():
             if post.original_post is not None:
                 # We remove (edited) and shared in published_time_text in order to transform published_time_text in date
                 datePostOrigin = datetime.fromtimestamp(dateparser.parse(post.original_post.published_time_text.replace('shared ', '').split('(')[0].strip()).timestamp(), self.tzinfo).strftime(self.dateFormats['dateString'])
-                self.writeresult("\n\nPost d'origine :\n")
+                self.writeresult("\nOriginal post :\n")
                 self.writeresult("URL : " + "https://youtube.com/post/" + post.original_post.post_id)
                 self.writeresult("\n")
-                self.writeresult("Date post d'origine : " + datePostOrigin)
+                self.writeresult("Date original post : " + datePostOrigin)
                 self.writeresult("\n")
-                self.writeresult("Auteur : " + post.original_post.author["authorEndpoint"]["url"][1:len(post.original_post.author["authorEndpoint"]["url"])] +
+                self.writeresult("Author : " + post.original_post.author["authorEndpoint"]["url"][1:len(post.original_post.author["authorEndpoint"]["url"])] +
                         " (" + post.original_post.channel_id + ")")
-                self.writeresult("\n")
+            
+            self.writeresult("\n")
+            print("Comments :")
+            self.writeresult("Comments :")
 
             # Comments
             lastParentReplies = 0
@@ -247,8 +253,8 @@ class Program():
                     self.writeresult("\n")
 
                     if comment['replies'] != "":
-                        print("*** Réponses : " + comment['replies'] + " ***\n")
-                        self.writeresult("*** Réponses : " + comment['replies'] + " ***\n")
+                        print("*** Replies : " + comment['replies'] + " ***\n")
+                        self.writeresult("*** Replies : " + comment['replies'] + " ***\n")
                         lastParentReplies = idComment
                         for reply in comment['repliesList']:
                             date = datetime.fromtimestamp(reply['time_parsed'])
