@@ -252,7 +252,7 @@ class Program():
                     #dateUpdate_object = datetime.fromisoformat(dateUpdate)
                     dateUpdate_object = dateutil.parser.isoparse(dateUpdate)
                     dateUpdate_text = dateUpdate_object.astimezone(self.tzinfo).strftime(self.dateFormats["dateString"])
-                    update_dateString = " (maj le " + dateUpdate_text + ")"
+                    update_dateString = " (last edited on " + dateUpdate_text + ")"
                 
                 # Clean HTML :
                 # replace unicode characters by utf-8
@@ -320,7 +320,7 @@ class Program():
                                 #dateUpdate_object = datetime.fromisoformat(dateUpdate)
                                 dateUpdate_object = dateutil.parser.isoparse(dateUpdate)
                                 dateUpdate_text = dateUpdate_object.astimezone(self.tzinfo).strftime(self.dateFormats["dateString"])
-                                update_dateString = " (maj le " + dateUpdate_text + ")"
+                                update_dateString = " (last edited on " + dateUpdate_text + ")"
                             
                             # Clean HTML :
                             # first replace <br> by new lines
@@ -351,14 +351,6 @@ class Program():
             else:
                 hasMoreComments = False
             
-        # We add new line only if last comment is not a reply of a comment or no comments
-        if lastParentReplies != idComment:
-            self.writeresult("\n")
-
-        # No comment, we add two newlines
-        if lastParentReplies == 0 and idComment == 0:
-            self.writeresult("\n\n")
-
         print("Execution was OK")
         self.writelog("Execution was OK")
         print("Ending program")

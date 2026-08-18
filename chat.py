@@ -6,20 +6,24 @@ from chat_downloader.errors import (
     NoChatReplay,
     LoginRequired,
     VideoUnplayable,
+    VideoUnavailable,
+    VideoNotFound,
     ChatDownloaderError
 )
 import scrapetube
 import sys, re, time
 import requests, json
+from http.cookiejar import (MozillaCookieJar, Cookie)
 from datetime import datetime
 import dateutil.parser
 from zoneinfo import ZoneInfo
 
 class Program():
-    def __init__(self, idchannel, urlchannel, youtubeKey, tz, output_dirs, dateFormats):
+    def __init__(self, idchannel, urlchannel, youtubeKey, session_params, tz, output_dirs, dateFormats):
         self.idchannel = idchannel
         self.urlchannel = urlchannel
         self.youtubeKey = youtubeKey
+        self.session_params = session_params
         self.tzinfo = ZoneInfo(tz)
         self.output_dirs = output_dirs
         self.dateFormats = dateFormats
@@ -137,6 +141,49 @@ class Program():
         except Exception as e:
             print("Error cleaning up : " + str(e))
     
+    def getVideoInfos(self, url):
+        try:
+            if self.session_params['cookies']:
+                cookie_jar = MozillaCookieJar(self.session_params['cookies'])
+                cookie_jar.load(ignore_discard=True)
+                session = requests.Session()
+                session.cookies = cookie_jar
+                response = session.get(url)
+            else:
+                # To avoid consent popup showing off when calling response = requests.get(url), we set a cookie to "Accept all" :
+                jar = requests.cookies.RequestsCookieJar()
+                jar.set('SOCS', 'CAI', domain='.youtube.com', secure=True) # CAI means "accept all"
+                response = requests.get(url, cookies=jar)
+            
+            if response.status_code == 200:
+                youtubeVideoResponse = response.text
+                ytInitialPlayerResponse = re.findall('ytInitialPlayerResponse\\s*=\\s*({.+?})\\s*;', response.text)
+                if len(ytInitialPlayerResponse) == 1:
+                    data = json.loads(ytInitialPlayerResponse[0])
+                    videoDetails = data.get('videoDetails')
+                    playabilityStatus = data.get('playabilityStatus')
+                    liveBroadcastDetails = self.safely_get_value_from_key(data, "microformat", "playerMicroformatRenderer", "liveBroadcastDetails")
+                    has_chat = True if liveBroadcastDetails is not None else False
+                    scheduledStartTime = self.safely_get_value_from_key(playabilityStatus, "liveStreamability", "liveStreamabilityRenderer", "offlineSlate",
+                                                                        "liveStreamOfflineSlateRenderer", "scheduledStartTime")
+                    if videoDetails is not None:
+                        video = {"videoId": videoDetails.get('videoId'), "title": videoDetails.get('title'),
+                        "is_live": videoDetails.get("isLive"), "has_chat": has_chat, "playabilityStatus": playabilityStatus,
+                        "scheduledStartTime": scheduledStartTime}
+                        return video                 
+                    else:
+                        print(f"ytInitialPlayerResponse : videoDetails not found, status={playabilityStatus.get('status')} reason={playabilityStatus.get('reason')}")
+                        self.writelog(f"ytInitialPlayerResponse : videoDetails not found, status={playabilityStatus.get('status')} reason={playabilityStatus.get('reason')}", 'debug')
+                else:
+                    print(f"ytInitialPlayerResponse not found")
+                    self.writelog(f"ytInitialPlayerResponse not found", 'debug')
+            else:
+                print(f"[×] Response of url {url} isn't OK : {response.status_code} {response.text}")
+                self.writelog(f"[×] Response of url {url} isn't OK : {response.status_code} {response.text}")
+        except Exception as e:
+            print(f"[×] Error url {url} : {e}")
+            self.writelog(f"[×] Error url {url} : {e}")
+    
     def main(self):
         self.writelog("Channel " + self.urlchannel + " id : " + self.idchannel)
         self.writeresult("Channel " + self.urlchannel + " id : " + self.idchannel)
@@ -156,38 +203,21 @@ class Program():
             
             for video in videosList:
                 url = "https://www.youtube.com/watch?v="+str(video['videoId'])
-
                 if videotype == "videos":
                     # Impossible to determine with scrapetube.get_channel() if a video is a Premiere
                     # and I don't want to hit YTB API V3 /videos for each video and consume a lot of quota.
                     # So I can determine wether a video has/had a chat by hitting Youtube video page source checking in var ytInitialPlayerResponse = {}
                     time.sleep(1)
-                    try:
-                        # To avoid consent popup showing off when calling response = requests.get(url), we set a cookie to "Accept all" :
-                        # See yt-dlp, streamlink, chat_downloader, youtube_community_tab (see ytct.py)
-                        jar = requests.cookies.RequestsCookieJar()
-                        jar.set('SOCS', 'CAI', domain='.youtube.com', secure=True) # CAI means "accept all"
-                        response = requests.get(url, cookies=jar)
-                        if response.status_code == 200:
-                            youtubeVideoResponse = response.text
-                            ytInitialPlayerResponse = re.findall('ytInitialPlayerResponse\\s*=\\s*({.+?})\\s*;', response.text)[0]
-                            data = json.loads(ytInitialPlayerResponse)
-
-                            # Ditch videos with no chat or videos with chat that are still on air
-                            liveBroadcastDetails = self.safely_get_value_from_key(data, "microformat", "playerMicroformatRenderer", "liveBroadcastDetails")
-                            if liveBroadcastDetails is None or liveBroadcastDetails.get("isLiveNow") is True:
-                                continue
-                        else:
-                            print(f"[×] idVideo={video['videoId']} Response of url {url} isn't OK : {response.status_code} {response.text}")
-                            self.writelog(f"[×] idVideo={video['videoId']} Response of url {url} isn't OK : {response.status_code} {response.text}")
-                            self.exitProgram()
-                    except Exception as e:
-                        print(f"[×] idVideo={video['videoId']} Error url {url} : {e}")
-                        self.writelog(f"[×] idVideo={video['videoId']} Error url {url} : {e}")
+                    
+                    videoInfo = self.getVideoInfos(url)
+                    if videoInfo is None:
                         self.exitProgram()
-                        
+                    # Ditch video if : no chat, still on live, or is scheduled
+                    elif videoInfo.get('has_chat') is False or videoInfo.get('is_live') is True or videoInfo.get('scheduledStartTime') is not None:
+                        continue
+
                 # Here, we only have streams and videos that have/had a chat
-                # If you don't want to use YTB API V3, use data and search for title, dates, description, duration, liveBroadcastDetails
+                # If you don't want to use YTB API V3, use data in getVideoInfos function to get title, dates, description, duration, liveBroadcastDetails
                 additionnalInfosURL = "https://www.googleapis.com/youtube/v3/videos?key=" + self.youtubeKey + "&id=" + video['videoId'] + "&part=snippet,contentDetails,liveStreamingDetails,statistics"
                 print(additionnalInfosURL)
                 try:
@@ -250,15 +280,15 @@ class Program():
                     self.writeresult("\n")
 
                     try:
-                        chat = ChatDownloader().get_chat(url)       # create a generator
+                        chat = ChatDownloader(cookies=self.session_params['cookies']).get_chat(url)       # create a generator
                         for message in chat:                        # iterate over messages
                             print(chat.format(message))
                             self.writeresult(chat.format(message))
                             self.writeresult("\n")
                     # List of exceptions : https://deepwiki.com/xenova/chat-downloader/6-error-handling
-                    # These exceptions are not really errors (LoginRequired isn't to me as I don't want to use authentication, VideoUnplayable for members-only content)
+                    # These exceptions are not really errors
                     # If you prefer not display any error in result file, comment this except block
-                    except (NoChatReplay, ChatDisabled, LoginRequired, VideoUnplayable) as ex:
+                    except (NoChatReplay, ChatDisabled, LoginRequired, VideoUnplayable, VideoUnavailable, VideoNotFound) as ex:
                         print(f"{ex}")
                         self.writeresult(f"{ex}")
                         self.writeresult("\n")
@@ -289,11 +319,12 @@ if __name__ == "__main__":
     urlchannel = "https://www.youtube.com/@your_channel"
     idchannel = '' # Found channel id on Youtube by clicking "Share channel" then "Copy channel ID"
     youtubeKey = '' # YouTube API Key from Google Cloud, see https://helano.github.io/help.html
+    session_params = {"cookies": ""}
     # Format
     tz = "Europe/Paris" # Set tz also in chat_downloader/formatting/custom_formats.json to apply tz to chat messages date
     dateFormats = {"dateString": "%d/%m/%Y %H:%M:%S", "dateDBString": "%Y-%m-%d %H:%M:%S", "dateFileString": "%d%m%Y%H%M%S"}
 
     # Launch
-    program = Program(idchannel, urlchannel, youtubeKey, tz, output_dirs, dateFormats)
+    program = Program(idchannel, urlchannel, youtubeKey, session_params, tz, output_dirs, dateFormats)
     program.main()
     

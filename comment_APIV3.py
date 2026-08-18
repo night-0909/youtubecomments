@@ -278,7 +278,7 @@ class Program():
                             #dateUpdate_object = datetime.fromisoformat(dateUpdate)
                             dateUpdate_object = dateutil.parser.isoparse(dateUpdate)
                             dateUpdate_text = dateUpdate_object.astimezone(self.tzinfo).strftime(self.dateFormats["dateString"])
-                            update_dateString = " (maj le " + dateUpdate_text + ")"
+                            update_dateString = " (last edited on " + dateUpdate_text + ")"
                         
                         # Clean HTML :
                         # replace unicode characters by utf-8
@@ -346,7 +346,7 @@ class Program():
                                         #dateUpdate_object = datetime.fromisoformat(dateUpdate)
                                         dateUpdate_object = dateutil.parser.isoparse(dateUpdate)
                                         dateUpdate_text = dateUpdate_object.astimezone(self.tzinfo).strftime(self.dateFormats["dateString"])
-                                        update_dateString = " (maj le " + dateUpdate_text + ")"
+                                        update_dateString = " (last edited on " + dateUpdate_text + ")"
                                     
                                     # Clean HTML :
                                     # first replace <br> by new lines

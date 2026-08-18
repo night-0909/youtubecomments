@@ -6,6 +6,8 @@ from chat_downloader.errors import (
     NoChatReplay,
     LoginRequired,
     VideoUnplayable,
+    VideoUnavailable,
+    VideoNotFound,    
     ChatDownloaderError
 )
 import sys, requests, json
@@ -14,11 +16,12 @@ import dateutil.parser
 from zoneinfo import ZoneInfo
 
 class Program():
-    def __init__(self, idchannel, urlchannel, videoId, youtubeKey, tz, dateFormats):
+    def __init__(self, idchannel, urlchannel, videoId, youtubeKey, session_params, tz, dateFormats):
         self.idchannel = idchannel
         self.urlchannel = urlchannel
         self.videoId = videoId
         self.youtubeKey = youtubeKey
+        self.session_params = session_params        
         self.tzinfo = ZoneInfo(tz)
         self.dateFormats = dateFormats
         self.loggingfile = None
@@ -180,7 +183,7 @@ class Program():
             #self.writeresult("\n")
 
             try:
-                chat = ChatDownloader().get_chat(url)       # create a generator
+                chat = ChatDownloader(**self.session_params).get_chat(url)       # create a generator
                 for message in chat:                        # iterate over messages
                     print(chat.format(message))
                     self.writeresult(chat.format(message))
@@ -188,17 +191,15 @@ class Program():
             # List of exceptions : https://deepwiki.com/xenova/chat-downloader/6-error-handling
             # These exceptions are not really errors (LoginRequired isn't to me as I don't want to use authentication, VideoUnplayable for members-only content)
             # If you prefer not display any error in result file, comment this except block
-            except (NoChatReplay, ChatDisabled, LoginRequired, VideoUnplayable) as ex:
+            except (NoChatReplay, ChatDisabled, LoginRequired, VideoUnplayable, VideoUnavailable, VideoNotFound) as ex:
                 print(f"{ex}")
                 self.writeresult(f"{ex}")
                 self.writeresult("\n")
             # These are errors
             except Exception as ex:
-                print(f"[×] idVideo={video['videoId']} Error writing chat : {ex}")
-                self.writelog(f"[×] idVideo={video['videoId']} Error writing chat : {ex}")
+                print(f"[×] idVideo={self.videoId} Error writing chat : {ex}")
+                self.writelog(f"[×] idVideo={self.videoId} Error writing chat : {ex}")
                 self.exitProgram()
-
-            self.writeresult("\n")
 
         print("Execution was OK")
         self.writelog("Execution was OK")
@@ -212,11 +213,12 @@ if __name__ == "__main__":
     idchannel = '' # Found channel id on Youtube by clicking "Share channel" then Copy channel ID
     videoId = "" # What's next to https://www.youtube.com/watch?v=
     youtubeKey = '' # YouTube API Key from Google Cloud, see https://helano.github.io/help.html
-
+    session_params = {"cookies": ""}    
     # Format
     tz = "Europe/Paris" # Set tz also in chat_downloader/formatting/custom_formats.json to apply tz to chat messages date
     dateFormats = {"dateString": "%d/%m/%Y %H:%M:%S", "dateDBString": "%Y-%m-%d %H:%M:%S", "dateFileString": "%d%m%Y%H%M%S"}
 
     # Launch
-    program = Program(idchannel, urlchannel, videoId, youtubeKey, tz, dateFormats)
+    program = Program(idchannel, urlchannel, videoId, youtubeKey, session_params, tz, dateFormats)
     program.main()
+
