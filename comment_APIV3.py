@@ -74,8 +74,8 @@ class Program():
         print(channelInfosURL)
         try:
             response = requests.get(channelInfosURL)
+            channelInfosResponse = response.text
             if response.status_code == 200:
-                channelInfosResponse = response.text
                 channel_json = json.loads(channelInfosResponse)       
                 
                 if channel_json.get('pageInfo').get('totalResults') == 0:
@@ -148,9 +148,13 @@ class Program():
                 print(additionnalInfosURL)
                 try:
                     response = requests.get(additionnalInfosURL)
+                    additionnalInfosResponse = response.text
                     if response.status_code == 200:
-                        additionnalInfosResponse = response.text
                         video_json = json.loads(additionnalInfosResponse)
+                        if video_json.get('pageInfo').get('totalResults') == 0:                        
+                            print(f"[×] idVideo={video['videoId']} video not found")
+                            self.writelog(f"[×] idVideo={video['videoId']} video not found")
+                            continue
                     else:
                         print(f"[×] idVideo={video['videoId']} Response of additionnalInfosURL {additionnalInfosURL} isn't OK : {response.status_code} {response.text}")
                         self.writelog(f"[×] idVideo={video['videoId']} Response of additionnalInfosURL {additionnalInfosURL} isn't OK : {response.status_code} {response.text}")
@@ -235,12 +239,17 @@ class Program():
                     print(commentsURL)
                     try:
                         response = requests.get(commentsURL)
+                        commentsResponse = response.text
                         if response.status_code == 200:
-                            commentsResponse = response.text
-                            comments_json = json.loads(commentsResponse)
+                            comments_json = json.loads(commentsResponse)                           
+                        elif response.status_code == 404:
+                            # Video not found
+                            comments_json = json.loads(commentsResponse)                           
+                            print(f"[×] idVideo={video['videoId']} Response of commentsURL {commentsURL} isn't OK : {response.status_code} {response.text}, error={comments_json['error']['message']}")
+                            self.writelog(f"[×] idVideo={video['videoId']} Response of commentsURL {commentsURL} isn't OK : {response.status_code} {response.text}, error={comments_json['error']['message']}")
+                            break
                         elif response.status_code == 403:
-                            # Cases where comments are turned off or insufficient permissions, see https://developers.google.com/youtube/v3/docs/errors#commentthreads
-                            commentsResponse = response.text
+                            # Cases where comments are turned off or insufficient permissions, see https://developers.google.com/youtube/v3/docs/errors#commentThreads_youtube.commentThreads.list
                             comments_json = json.loads(commentsResponse)
                             self.writeresult("\n")
                             self.writeresult(f"{comments_json['error']['message']}")
@@ -314,9 +323,21 @@ class Program():
 
                                 try:
                                     response = requests.get(repliesURL)
+                                    repliesResponse = response.text
                                     if response.status_code == 200:
-                                        repliesResponse = response.text
                                         replies_json = json.loads(repliesResponse)
+                                    elif response.status_code == 404:
+                                        # Comment parentId not found
+                                        replies_json = json.loads(repliesResponse)
+                                        print(f"[×] idVideo={video['videoId']} Response of repliesURL {repliesURL} isn't OK : {response.status_code} {response.text}, error={replies_json['error']['message']}")
+                                        self.writelog(f"[×] idVideo={video['videoId']} Response of repliesURL {repliesURL} isn't OK : {response.status_code} {response.text}, error={replies_json['error']['message']}")
+                                        break
+                                    elif response.status_code == 403:
+                                        # Cases where comments are turned off or insufficient permissions, see https://developers.google.com/youtube/v3/docs/errors#comments_youtube.comments.list
+                                        replies_json = json.loads(repliesResponse)
+                                        self.writeresult("\n")
+                                        self.writeresult(f"{replies_json['error']['message']}")
+                                        break
                                     else:
                                         print(f"[×] idVideo={video['videoId']} Response of repliesURL {repliesURL} isn't OK : {response.status_code} {response.text}")
                                         self.writelog(f"[×] idVideo={video['videoId']} Response of repliesURL {repliesURL} isn't OK : {response.status_code} {response.text}")

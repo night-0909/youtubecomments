@@ -85,8 +85,8 @@ class Program():
         print(channelInfosURL)
         try:
             response = requests.get(channelInfosURL)
+            channelInfosResponse = response.text
             if response.status_code == 200:
-                channelInfosResponse = response.text
                 channel_json = json.loads(channelInfosResponse)
 
                 if channel_json.get('pageInfo').get('totalResults') == 0:
@@ -142,6 +142,7 @@ class Program():
             print("Error cleaning up : " + str(e))
     
     def getVideoInfos(self, url):
+        infosVideo = {"ytInitialPlayerResponse": None, "videoDetails": None}
         try:
             if self.session_params['cookies']:
                 cookie_jar = MozillaCookieJar(self.session_params['cookies'])
@@ -150,16 +151,17 @@ class Program():
                 session.cookies = cookie_jar
                 response = session.get(url)
             else:
-                # To avoid consent popup showing off when calling response = requests.get(url), we set a cookie to "Accept all" :
+                # To avoid consent popup showing off when calling response = requests.get(url), we set a cookie to "Accept all"
                 jar = requests.cookies.RequestsCookieJar()
                 jar.set('SOCS', 'CAI', domain='.youtube.com', secure=True) # CAI means "accept all"
                 response = requests.get(url, cookies=jar)
             
             if response.status_code == 200:
-                youtubeVideoResponse = response.text
                 ytInitialPlayerResponse = re.findall('ytInitialPlayerResponse\\s*=\\s*({.+?})\\s*;', response.text)
                 if len(ytInitialPlayerResponse) == 1:
                     data = json.loads(ytInitialPlayerResponse[0])
+                    infosVideo["ytInitialPlayerResponse"] = data
+                    
                     videoDetails = data.get('videoDetails')
                     playabilityStatus = data.get('playabilityStatus')
                     liveBroadcastDetails = self.safely_get_value_from_key(data, "microformat", "playerMicroformatRenderer", "liveBroadcastDetails")
@@ -170,19 +172,21 @@ class Program():
                         video = {"videoId": videoDetails.get('videoId'), "title": videoDetails.get('title'),
                         "is_live": videoDetails.get("isLive"), "has_chat": has_chat, "playabilityStatus": playabilityStatus,
                         "scheduledStartTime": scheduledStartTime}
-                        return video                 
+                        infosVideo["videoDetails"] = video
                     else:
-                        print(f"ytInitialPlayerResponse : videoDetails not found, status={playabilityStatus.get('status')} reason={playabilityStatus.get('reason')}")
-                        self.writelog(f"ytInitialPlayerResponse : videoDetails not found, status={playabilityStatus.get('status')} reason={playabilityStatus.get('reason')}", 'debug')
+                        print(f"{url} ytInitialPlayerResponse : videoDetails not found, status={playabilityStatus.get('status')} reason={playabilityStatus.get('reason')}")
+                        self.writelog(f"{url} ytInitialPlayerResponse : videoDetails not found, status={playabilityStatus.get('status')} reason={playabilityStatus.get('reason')}")
                 else:
-                    print(f"ytInitialPlayerResponse not found")
-                    self.writelog(f"ytInitialPlayerResponse not found", 'debug')
+                    print(f"{url} ytInitialPlayerResponse not found")
+                    self.writelog(f"{url} ytInitialPlayerResponse not found")
             else:
                 print(f"[×] Response of url {url} isn't OK : {response.status_code} {response.text}")
                 self.writelog(f"[×] Response of url {url} isn't OK : {response.status_code} {response.text}")
         except Exception as e:
             print(f"[×] Error url {url} : {e}")
             self.writelog(f"[×] Error url {url} : {e}")
+            
+        return infosVideo
     
     def main(self):
         self.writelog("Channel " + self.urlchannel + " id : " + self.idchannel)
@@ -193,7 +197,7 @@ class Program():
         videostypes = ["streams", "videos"]
         for videotype in videostypes :
             num_videos_processed = 0
-            videos = scrapetube.get_channel(channel_id=self.idchannel, content_type=videotype, sort_by="newest")
+            videos = scrapetube.get_channel(channel_id=self.idchannel, content_type=videotype, sort_by="newest")            
             videosList = list(videos)
             num_videosList = len(videosList)
             print(f"Type : {videotype} (total : {num_videosList})")
@@ -202,19 +206,27 @@ class Program():
             self.writeresult("\n\n")
             
             for video in videosList:
+                time.sleep(2)
                 url = "https://www.youtube.com/watch?v="+str(video['videoId'])
+               
                 if videotype == "videos":
                     # Impossible to determine with scrapetube.get_channel() if a video is a Premiere
                     # and I don't want to hit YTB API V3 /videos for each video and consume a lot of quota.
                     # So I can determine wether a video has/had a chat by hitting Youtube video page source checking in var ytInitialPlayerResponse = {}
-                    time.sleep(1)
                     
                     videoInfo = self.getVideoInfos(url)
-                    if videoInfo is None:
-                        self.exitProgram()
-                    # Ditch video if : no chat, still on live, or is scheduled
-                    elif videoInfo.get('has_chat') is False or videoInfo.get('is_live') is True or videoInfo.get('scheduledStartTime') is not None:
+                    # Pass if ytInitialPlayerResponse is None or videoDetails is None
+                    if videoInfo['ytInitialPlayerResponse'] is None:
                         continue
+                    else:
+                        if videoInfo['videoDetails'] is None:
+                            continue
+                        else:
+                            # Ditch video if : no chat, still on live, or is scheduled
+                            if (videoInfo['videoDetails']['has_chat'] is False
+                            or videoInfo['videoDetails']['is_live'] is True
+                            or videoInfo['videoDetails']['scheduledStartTime'] is not None):
+                                continue
 
                 # Here, we only have streams and videos that have/had a chat
                 # If you don't want to use YTB API V3, use data in getVideoInfos function to get title, dates, description, duration, liveBroadcastDetails
@@ -222,9 +234,13 @@ class Program():
                 print(additionnalInfosURL)
                 try:
                     response = requests.get(additionnalInfosURL)
+                    additionnalInfosResponse = response.text
                     if response.status_code == 200:
-                        additionnalInfosResponse = response.text
                         video_json = json.loads(additionnalInfosResponse)
+                        if video_json.get('pageInfo').get('totalResults') == 0:                        
+                            print(f"[×] idVideo={video['videoId']} video not found")
+                            self.writelog(f"[×] idVideo={video['videoId']} video not found")
+                            continue
                     else:
                         print(f"[×] idVideo={video['videoId']} Response of additionnalInfosURL {additionnalInfosURL} isn't OK : {response.status_code} {response.text}")
                         self.writelog(f"[×] idVideo={video['videoId']} Response of additionnalInfosURL {additionnalInfosURL} isn't OK : {response.status_code} {response.text}")
