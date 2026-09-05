@@ -10,9 +10,10 @@ community.py : extract Posts tab (posts + comments) of a Youtube channel.<br />
 Modules used and some edits to do :<br />
 - I use scrapetube (https://github.com/dermasmid/scrapetube) and made some edits.<br />
 See my version : https://github.com/night-0909/scrapetube<br />
-- I use youtube-comment-downloader (https://github.com/egbertbouman/youtube-comment-downloader/) without edit I think.<br />
+- I use youtube-comment-downloader (https://github.com/egbertbouman/youtube-comment-downloader/) and made one little edit.<br />
+See my version : https://github.com/night-0909/youtube-comment-downloader<br />
 - I use chat_downloader version (https://github.com/xenova/chat-downloader) and youtube-community-tab (https://github.com/HoloArchivists/youtube-community-tab) and made some edits.<br />
 See my versions : https://github.com/night-0909/chat-downloader and https://github.com/night-0909/youtube-community-tab
 
-chat.py and chat-one.py accept cookies from Youtube account.<br />
+chat.py, chat-one.py and community.py accept cookies from Youtube account.<br />
 Procedure to export cookies from Youtube : read https://github.com/yt-dlp/yt-dlp/wiki/Extractors#exporting-youtube-cookies and https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp

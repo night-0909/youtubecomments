@@ -2,17 +2,20 @@
 
 from youtube_community_tab.community_tab import CommunityTab
 from youtube_comment_downloader import *
-import requests, json, sys
+import requests, requests_cache, json, sys
+from http.cookiejar import MozillaCookieJar
 from datetime import datetime
 import dateparser
 from zoneinfo import ZoneInfo
 
 class Program():
-    def __init__(self, idchannel, urlchannel, youtubeKey, tz, output_dirs, dateFormats):
+    def __init__(self, idchannel, urlchannel, youtubeKey, delay_requests, cookies, tz, output_dirs, dateFormats):
         self.idchannel = idchannel
         self.urlchannel = urlchannel
         self.youtubeKey = youtubeKey
         self.tzinfo = ZoneInfo(tz)
+        self.delay_requests = delay_requests
+        self.cookies = cookies
         self.output_dirs = output_dirs
         self.dateFormats = dateFormats
         self.loggingfile = None
@@ -73,8 +76,8 @@ class Program():
         print(channelInfosURL)
         try:
             response = requests.get(channelInfosURL)
+            channelInfosResponse = response.text
             if response.status_code == 200:
-                channelInfosResponse = response.text
                 channel_json = json.loads(channelInfosResponse)       
 
                 if channel_json.get('pageInfo').get('totalResults') == 0:
@@ -157,12 +160,19 @@ class Program():
         # Cache expiration
         EXPIRATION_TIME = 1 * 60 * 60
 
+        # Cookies for youtube_community_tab
+        if self.cookies != "":
+            cookie_jar = MozillaCookieJar(self.cookies)
+            cookie_jar.load(ignore_discard=True)
+            requests_cache.cookies = cookie_jar
+
         try:
             ct = CommunityTab(self.idchannel)
             ct.load_posts(expire_after=EXPIRATION_TIME)
 
             # Load more posts
             while(ct.posts_continuation_token):
+                time.sleep(self.delay_requests)
                 ct.load_posts(expire_after=EXPIRATION_TIME)
                 #if (len(ct.posts) > 80):
                     #break
@@ -179,7 +189,8 @@ class Program():
 
         num_posts_processed = 0
         for post in ct.posts:
-            url = "https://youtube.com/post/" + post.post_id
+            time.sleep(self.delay_requests)
+            url = "https://www.youtube.com/post/" + post.post_id
             print(url)
             self.writeresult(url)
             self.writeresult("\n")
@@ -201,20 +212,20 @@ class Program():
 
                     if "navigationEndpoint" in elt and "commandMetadata" in elt["navigationEndpoint"] and "webCommandMetadata" in elt["navigationEndpoint"]["commandMetadata"]:
                         self.writeresult("\n")
-                        self.writeresult("https://youtube.com" + elt["navigationEndpoint"]["commandMetadata"]["webCommandMetadata"]["url"])
+                        self.writeresult("https://www.youtube.com" + elt["navigationEndpoint"]["commandMetadata"]["webCommandMetadata"]["url"])
                 
                 # Video link
                 if post.backstage_attachment is not None and 'videoRenderer' in post.backstage_attachment:
                     self.writeresult("\n")
                     # url can be None if private video
-                    self.writeresult("https://youtube.com" + str(post.backstage_attachment['videoRenderer']['watchEndpoint']['url']))
+                    self.writeresult("https://www.youtube.com" + str(post.backstage_attachment['videoRenderer']['watchEndpoint']['url']))
 
             # Cited post
             if post.original_post is not None:
                 # We remove (edited) and shared in published_time_text in order to transform published_time_text in date
                 datePostOrigin = datetime.fromtimestamp(dateparser.parse(post.original_post.published_time_text.replace('shared ', '').split('(')[0].strip()).timestamp(), self.tzinfo).strftime(self.dateFormats['dateString'])
                 self.writeresult("\nOriginal post :\n")
-                self.writeresult("URL : " + "https://youtube.com/post/" + post.original_post.post_id)
+                self.writeresult("URL : " + "https://www.youtube.com/post/" + post.original_post.post_id)
                 self.writeresult("\n")
                 self.writeresult("Date original post : " + datePostOrigin)
                 self.writeresult("\n")
@@ -229,10 +240,12 @@ class Program():
             lastParentReplies = 0
             idComment = 0
             comments = []
+            time.sleep(self.delay_requests)
+            
             try:
-                downloader = YoutubeCommentDownloader()
-                comments = downloader.get_comments_from_url(url, sort_by=SORT_BY_RECENT)
-                # comments is a generator so we cast it to list to get length and don't consume the generator
+                downloader = YoutubeCommentDownloader(self.cookies)
+                comments = downloader.get_comments_from_url(url, sort_by=SORT_BY_RECENT, sleep=.1)
+                # comments is a generator so we cast it to list to get its length and don't consume the generator
                 listcomments = list(comments)
             except Exception as e:
                 print(f"[×] {url} Error YoutubeCommentDownloader : {e}")
@@ -294,11 +307,13 @@ if __name__ == "__main__":
     urlchannel = "https://www.youtube.com/@your_channel"
     idchannel = '' # Found channel id on Youtube by clicking "Share channel" then "Copy channel ID"
     youtubeKey = '' # YouTube API Key from Google Cloud, see https://helano.github.io/help.html
+    delay_requests = 1 # Delay applied after each loading more posts, each post, each comment download
+    cookies = '' # Cookie path or ''
     # Format
     tz = "Europe/Paris"
     dateFormats = {"dateString": "%d/%m/%Y %H:%M:%S", "dateDBString": "%Y-%m-%d %H:%M:%S", "dateFileString": "%d%m%Y%H%M%S"}
 
     # Launch
-    program = Program(idchannel, urlchannel, youtubeKey, tz, output_dirs, dateFormats)
+    program = Program(idchannel, urlchannel, youtubeKey, delay_requests, cookies, tz, output_dirs, dateFormats)
     program.main()
 
