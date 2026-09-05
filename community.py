@@ -244,7 +244,7 @@ class Program():
             
             try:
                 downloader = YoutubeCommentDownloader(self.cookies)
-                comments = downloader.get_comments_from_url(url, sort_by=SORT_BY_RECENT, sleep=.1)
+                comments = downloader.get_comments_from_url(url, sort_by=SORT_BY_RECENT)
                 # comments is a generator so we cast it to list to get its length and don't consume the generator
                 listcomments = list(comments)
             except Exception as e:
