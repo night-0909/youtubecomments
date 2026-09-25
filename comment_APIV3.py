@@ -6,18 +6,21 @@ import dateutil.parser
 from bs4 import BeautifulSoup
 import sys
 import requests, json
+from urllib3.util.retry import Retry
 from zoneinfo import ZoneInfo
 
 class Program():
-    def __init__(self, idchannel, urlchannel, youtubeKey, tz, output_dirs, dateFormats):
+    def __init__(self, idchannel, urlchannel, youtubeKey, session_params, tz, output_dirs, dateFormats):
         self.idchannel = idchannel
         self.urlchannel = urlchannel
         self.youtubeKey = youtubeKey
+        self.session_params = session_params
         self.tzinfo = ZoneInfo(tz)
         self.output_dirs = output_dirs
         self.dateFormats = dateFormats
         self.loggingfile = None
         self.resultfile = None
+        self.sessionGoogleApis = None
         
         self.start()
         
@@ -25,7 +28,7 @@ class Program():
         self.initLoggingFile()
         print("Starting program")
         self.writelog("Starting program")
-        
+        self.initSessionGoogleApis()
         self.initChannel()
         self.initResultFile()
             
@@ -68,12 +71,41 @@ class Program():
         # Write in real time
         #self.resultfile.flush()
 
+    def initSessionGoogleApis(self):
+        # Youtube Data API V3 can sometimes return HTTP status 400 and 403 whereas request is valid, and sending this same request succeeds.        
+        self.sessionGoogleApis = self.create_session(status_forcelist=(400, 403, 408, 425, 429, 500, 502, 503, 504))
+
+    def create_session(
+        self,
+        retries=3,
+        backoff_factor=1,
+        backoff_jitter=0.5,
+        allowed_methods=frozenset(["GET", "POST", "HEAD", "OPTIONS"]),
+        status_forcelist=(408, 425, 429, 500, 502, 503, 504),
+    ):
+
+        session = requests.Session()
+        
+        retry = Retry(
+            total=retries,
+            backoff_factor=backoff_factor,
+            backoff_jitter=backoff_jitter,
+            allowed_methods=allowed_methods,
+            status_forcelist=status_forcelist,
+            raise_on_status=False
+        )
+
+        adapter = requests.adapters.HTTPAdapter(max_retries=retry)
+        session.mount("https://", adapter)
+        session.mount("http://", adapter)
+        return session
+
     def initChannel(self):
         # Get handle from idchannel
         channelInfosURL = "https://www.googleapis.com/youtube/v3/channels?key=" + self.youtubeKey + "&id=" + self.idchannel + "&part=snippet"
         print(channelInfosURL)
         try:
-            response = requests.get(channelInfosURL)
+            response = self.sessionGoogleApis.get(channelInfosURL, timeout=(3.05, 20))
             channelInfosResponse = response.text
             if response.status_code == 200:
                 channel_json = json.loads(channelInfosResponse)       
@@ -124,11 +156,17 @@ class Program():
         self.writeresult("\n\n")
         
         # Get all comments on videos
-        videostypes = ["streams", "videos", "shorts"]
-        for videotype in videostypes :
+        videotypes = ["streams", "videos", "shorts"]
+        for videotype in videotypes:
             num_videos_processed = 0
-            videos = scrapetube.get_channel(channel_id=self.idchannel, content_type=videotype, sort_by="newest")
-            videosList = list(videos)
+            try:
+                videos = scrapetube.get_channel(channel_id=self.idchannel, content_type=videotype, cookies=self.session_params["cookies"], sort_by="newest")
+                videosList = list(videos)
+            except Exception as e:
+                print(f"[×] Error scrapetube getting {videotype} : {e}")
+                self.writelog(f"[×] Error scrapetube getting {videotype} : {e}")
+                self.exitProgram()
+                        
             num_videosList = len(videosList)
             print(f"Type : {videotype} (total : {num_videosList})")
             self.writelog(f"Type : {videotype} (total : {num_videosList})")
@@ -147,7 +185,7 @@ class Program():
                 additionnalInfosURL = "https://www.googleapis.com/youtube/v3/videos?key=" + self.youtubeKey + "&id=" + video['videoId'] + "&part=snippet,contentDetails,liveStreamingDetails,statistics"
                 print(additionnalInfosURL)
                 try:
-                    response = requests.get(additionnalInfosURL)
+                    response = self.sessionGoogleApis.get(additionnalInfosURL, timeout=(3.05, 20))
                     additionnalInfosResponse = response.text
                     if response.status_code == 200:
                         video_json = json.loads(additionnalInfosResponse)
@@ -238,7 +276,7 @@ class Program():
                                   "&part=id,replies,snippet&maxResults=100" + nextPageTokenCommentsString
                     print(commentsURL)
                     try:
-                        response = requests.get(commentsURL)
+                        response = self.sessionGoogleApis.get(commentsURL, timeout=(3.05, 20))
                         commentsResponse = response.text
                         if response.status_code == 200:
                             comments_json = json.loads(commentsResponse)                           
@@ -322,7 +360,7 @@ class Program():
                                 print(repliesURL)
 
                                 try:
-                                    response = requests.get(repliesURL)
+                                    response = self.sessionGoogleApis.get(repliesURL, timeout=(3.05, 20))
                                     repliesResponse = response.text
                                     if response.status_code == 200:
                                         replies_json = json.loads(repliesResponse)
@@ -426,6 +464,7 @@ if __name__ == "__main__":
     urlchannel = "https://www.youtube.com/@your_channel"
     idchannel = '' # Found channel id on Youtube by clicking "Share channel" then "Copy channel ID"
     youtubeKey = '' # YouTube API Key from Google Cloud, see https://helano.github.io/help.html
+    session_params = {"cookies": ""}    
     # Format
     tz = "Europe/Paris"
     dateFormats = {"dateString": "%d/%m/%Y %H:%M:%S", "dateDBString": "%Y-%m-%d %H:%M:%S", "dateFileString": "%d%m%Y%H%M%S"}

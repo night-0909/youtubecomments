@@ -2,7 +2,7 @@
 
 from youtube_community_tab.community_tab import CommunityTab
 from youtube_comment_downloader import *
-import requests, requests_cache, json, sys
+import requests, requests_cache, json, sys, os
 from http.cookiejar import MozillaCookieJar
 from datetime import datetime
 import dateparser
@@ -162,9 +162,10 @@ class Program():
 
         # Cookies for youtube_community_tab
         if self.cookies != "":
-            cookie_jar = MozillaCookieJar(self.cookies)
-            cookie_jar.load(ignore_discard=True)
-            requests_cache.cookies = cookie_jar
+            if os.path.isfile(self.cookies):
+                cookie_jar = MozillaCookieJar(self.cookies)
+                cookie_jar.load(ignore_discard=True)
+                requests_cache.cookies = cookie_jar
 
         try:
             ct = CommunityTab(self.idchannel)

@@ -74,8 +74,8 @@ class Program():
         print(channelInfosURL)
         try:
             response = requests.get(channelInfosURL)
+            channelInfosResponse = response.text
             if response.status_code == 200:
-                channelInfosResponse = response.text
                 channel_json = json.loads(channelInfosResponse)       
 
                 if channel_json.get('pageInfo').get('totalResults') == 0:
@@ -125,8 +125,8 @@ class Program():
         print(additionnalInfosURL)
         try:
             response = requests.get(additionnalInfosURL)
+            additionnalInfosResponse = response.text
             if response.status_code == 200:
-                additionnalInfosResponse = response.text
                 video_json = json.loads(additionnalInfosResponse)
                 if video_json.get('pageInfo').get('totalResults') == 0:
                     print(f"[×] idVideo={self.videoId} Error additionnalInfosURL {additionnalInfosURL} : video not found")

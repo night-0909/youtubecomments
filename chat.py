@@ -11,9 +11,10 @@ from chat_downloader.errors import (
     ChatDownloaderError
 )
 import scrapetube
-import sys, re, time
+import sys, os, re, time
 import requests, json
-from http.cookiejar import (MozillaCookieJar, Cookie)
+from urllib3.util.retry import Retry
+from http.cookiejar import MozillaCookieJar
 from datetime import datetime
 import dateutil.parser
 from zoneinfo import ZoneInfo
@@ -29,17 +30,21 @@ class Program():
         self.dateFormats = dateFormats
         self.loggingfile = None
         self.resultfile = None
-            
+        self.sessionYoutube = None
+        self.sessionGoogleApis = None
+                       
         self.start()
         
     def start(self):
         self.initLoggingFile()
         print("Starting program")
         self.writelog("Starting program")
-        
+        self.initCookies()
+        self.initSessionYoutube()
+        self.initSessionGoogleApis()
         self.initChannel()
         self.initResultFile()
-
+       
     def initLoggingFile(self):
         loggingfilename = self.output_dirs['log_file'] + "chat_" + self.idchannel + ".log"
         try:
@@ -79,12 +84,69 @@ class Program():
         # Write in real time
         #self.resultfile.flush()
 
+    def initCookies(self):
+        self.set_user_cookies()
+        self.setCookies()
+
+    def set_user_cookies(self):
+        self.user_cookies = False
+        if self.session_params['cookies']:
+            if os.path.isfile(self.session_params['cookies']):
+                self.user_cookies = True
+                   
+    def setCookies(self):
+        if self.user_cookies is False:
+            # To avoid consent popup showing off when calling response = requests.get(url), we set a cookie to "Accept all"
+            cookie_jar = requests.cookies.RequestsCookieJar()
+            cookie_jar.set('SOCS', 'CAI', domain='.youtube.com', secure=True) # CAI means "accept all"          
+        else:
+            cookie_jar = MozillaCookieJar(self.session_params['cookies'])
+            cookie_jar.load(ignore_discard=True)
+            
+        self.cookie_jar = cookie_jar
+
+    def initSessionYoutube(self):
+        self.sessionYoutube = self.create_session(cookies=self.cookie_jar)
+
+    def initSessionGoogleApis(self):
+        # Youtube Data API V3 can sometimes return HTTP status 400 and 403 whereas request is valid, and sending this same request succeeds.
+        self.sessionGoogleApis = self.create_session(status_forcelist=(400, 403, 408, 425, 429, 500, 502, 503, 504))
+
+    def create_session(
+        self,
+        cookies=None,
+        retries=3,
+        backoff_factor=1,
+        backoff_jitter=0.5,
+        allowed_methods=frozenset(["GET", "POST", "HEAD", "OPTIONS"]),
+        status_forcelist=(408, 425, 429, 500, 502, 503, 504),
+    ):
+
+        session = requests.Session()
+        
+        if cookies is not None:
+            session.cookies = cookies        
+
+        retry = Retry(
+            total=retries,
+            backoff_factor=backoff_factor,
+            backoff_jitter=backoff_jitter,
+            allowed_methods=allowed_methods,
+            status_forcelist=status_forcelist,
+            raise_on_status=False
+        )
+
+        adapter = requests.adapters.HTTPAdapter(max_retries=retry)
+        session.mount("https://", adapter)
+        session.mount("http://", adapter)
+        return session
+
     def initChannel(self):
         # Get handle from idchannel
         channelInfosURL = "https://www.googleapis.com/youtube/v3/channels?key=" + self.youtubeKey + "&id=" + self.idchannel + "&part=snippet"
         print(channelInfosURL)
         try:
-            response = requests.get(channelInfosURL)
+            response = self.sessionGoogleApis.get(channelInfosURL, timeout=(3.05, 20))
             channelInfosResponse = response.text
             if response.status_code == 200:
                 channel_json = json.loads(channelInfosResponse)
@@ -143,18 +205,9 @@ class Program():
     
     def getVideoInfos(self, url):
         infosVideo = {"ytInitialPlayerResponse": None, "videoDetails": None}
+
         try:
-            if self.session_params['cookies']:
-                cookie_jar = MozillaCookieJar(self.session_params['cookies'])
-                cookie_jar.load(ignore_discard=True)
-                session = requests.Session()
-                session.cookies = cookie_jar
-                response = session.get(url)
-            else:
-                # To avoid consent popup showing off when calling response = requests.get(url), we set a cookie to "Accept all"
-                jar = requests.cookies.RequestsCookieJar()
-                jar.set('SOCS', 'CAI', domain='.youtube.com', secure=True) # CAI means "accept all"
-                response = requests.get(url, cookies=jar)
+            response = self.sessionYoutube.get(url, timeout=(3.05, 20))
             
             if response.status_code == 200:
                 ytInitialPlayerResponse = re.findall('ytInitialPlayerResponse\\s*=\\s*({.+?})\\s*;', response.text)
@@ -194,11 +247,17 @@ class Program():
         self.writeresult("\n\n")
 
         # Get all url streams and Premiere videos
-        videostypes = ["streams", "videos"]
-        for videotype in videostypes :
+        videotypes = ["streams", "videos"]
+        for videotype in videotypes:
             num_videos_processed = 0
-            videos = scrapetube.get_channel(channel_id=self.idchannel, content_type=videotype, sort_by="newest")            
-            videosList = list(videos)
+            try:
+                videos = scrapetube.get_channel(channel_id=self.idchannel, content_type=videotype, cookies=self.session_params["cookies"], sort_by="newest")
+                videosList = list(videos)
+            except Exception as e:
+                print(f"[×] Error scrapetube getting {videotype} : {e}")
+                self.writelog(f"[×] Error scrapetube getting {videotype} : {e}")
+                self.exitProgram()
+            
             num_videosList = len(videosList)
             print(f"Type : {videotype} (total : {num_videosList})")
             self.writelog(f"Type : {videotype} (total : {num_videosList})")
@@ -233,7 +292,7 @@ class Program():
                 additionnalInfosURL = "https://www.googleapis.com/youtube/v3/videos?key=" + self.youtubeKey + "&id=" + video['videoId'] + "&part=snippet,contentDetails,liveStreamingDetails,statistics"
                 print(additionnalInfosURL)
                 try:
-                    response = requests.get(additionnalInfosURL)
+                    response = self.sessionGoogleApis.get(additionnalInfosURL, timeout=(3.05, 20))
                     additionnalInfosResponse = response.text
                     if response.status_code == 200:
                         video_json = json.loads(additionnalInfosResponse)

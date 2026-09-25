@@ -12,8 +12,11 @@ Modules used and some edits to do :<br />
 See my version : https://github.com/night-0909/scrapetube<br />
 - I use youtube-comment-downloader (https://github.com/egbertbouman/youtube-comment-downloader/) and made one little edit.<br />
 See my version : https://github.com/night-0909/youtube-comment-downloader<br />
-- I use chat_downloader version (https://github.com/xenova/chat-downloader) and youtube-community-tab (https://github.com/HoloArchivists/youtube-community-tab) and made some edits.<br />
-See my versions : https://github.com/night-0909/chat-downloader and https://github.com/night-0909/youtube-community-tab
+- I use chat_downloader version (https://github.com/xenova/chat-downloader) and made some edits.<br />
+See my versions : https://github.com/night-0909/chat-downloader<br />
+- I use youtube-community-tab (https://github.com/HoloArchivists/youtube-community-tab) and made some edits.<br />
+See my version : https://github.com/night-0909/youtube-community-tab<br />
 
 chat.py, chat-one.py and community.py accept cookies from Youtube account.<br />
+You'll have better results if you use cookies : bypass bot detection, rate limits, access to members-only content, login required content.<br />
 Procedure to export cookies from Youtube : read https://github.com/yt-dlp/yt-dlp/wiki/Extractors#exporting-youtube-cookies and https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp
