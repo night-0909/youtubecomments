@@ -315,51 +315,20 @@ class Program():
                 self.writeresult("\n")
 
                 # Get replies of comment
-                # Use https://www.googleapis.com/youtube/v3/comments to get all comments
+                
                 if snippet.get('totalReplyCount') > 0:
-                    print("*** Replies : " + str(snippet.get('totalReplyCount')) + " ***")
-                    self.writeresult("*** Replies : " + str(snippet.get('totalReplyCount')) + " ***\n")
-
                     hasMoreReplies = True
                     nextPageTokenReplies = 0
                     nextPageTokenRepliesString = ""
-                    while hasMoreReplies is True:
-                        if nextPageTokenReplies != 0 :
-                            nextPageTokenRepliesString = "&pageToken=" + nextPageTokenReplies
-                            
-                        repliesURL = "https://www.googleapis.com/youtube/v3/comments?key=" + self.youtubeKey + "&parentId=" + idComment + \
-                        "&part=id,snippet&maxResults=100" + nextPageTokenRepliesString
-                        print(repliesURL)
+                    
+                    print("*** Replies : " + str(snippet.get('totalReplyCount')) + " ***")
+                    self.writeresult("*** Replies : " + str(snippet.get('totalReplyCount')) + " ***\n")
 
-                        try:
-                            response = self.sessionGoogleApis.get(repliesURL, timeout=(3.05, 20))
-                            repliesResponse = response.text
-                            if response.status_code == 200:
-                                replies_json = json.loads(repliesResponse)
-                            elif response.status_code == 404:
-                                # Comment parentId not found
-                                replies_json = json.loads(repliesResponse)
-                                print(f"[×] idVideo={video['videoId']} Response of repliesURL {repliesURL} isn't OK : {response.status_code} {response.text}, error={replies_json['error']['message']}")
-                                self.writelog(f"[×] idVideo={video['videoId']} Response of repliesURL {repliesURL} isn't OK : {response.status_code} {response.text}, error={replies_json['error']['message']}")
-                                break
-                            elif response.status_code == 403:
-                                # Cases where comments are turned off or insufficient permissions, see https://developers.google.com/youtube/v3/docs/errors#comments_youtube.comments.list
-                                replies_json = json.loads(repliesResponse)
-                                self.writeresult("\n")
-                                self.writeresult(f"{replies_json['error']['message']}")
-                                break
-                            else:
-                                print(f"[×] idVideo={video['videoId']} Response of repliesURL {repliesURL} isn't OK : {response.status_code} {response.text}")
-                                self.writelog(f"[×] idVideo={video['videoId']} Response of repliesURL {repliesURL} isn't OK : {response.status_code} {response.text}")
-                                self.exitProgram()
-                        except Exception as e:
-                            print(f"[×] idVideo={self.videoId} Error repliesURL {repliesURL} : {e}")
-                            self.writelog(f"[×] idVideo={self.videoId} Error repliesURL {repliesURL} : {e}")
-                            self.exitProgram()
-
-                        items = replies_json.get('items')
-                        for item in items:
-                            realsnippet = item.get('snippet')
+                    # Check if comment has all replies in replies object, if not get them with /comments endpoint
+                    if len(item.get('replies').get('comments')) == snippet.get('totalReplyCount'):
+                        replies = item.get('replies').get('comments')
+                        for reply in replies :
+                            realsnippet = reply.get('snippet')
                             author = realsnippet.get('authorDisplayName')
                             channelId = realsnippet.get('authorChannelId').get('value')
                             text = realsnippet.get('textDisplay')
@@ -391,16 +360,90 @@ class Program():
 
                             print(publish_dateString + update_dateString + " " + author + " (" + channelId + ")" + " : " + textComment)
                             self.writeresult(publish_dateString + update_dateString + " " + author + " (" + channelId + ")" + " : " + textComment)
-                            lastParentReplies = idComment
                             self.writeresult("\n")
-
-                        # Get continue token
-                        if "nextPageToken" in replies_json:
-                            nextPageTokenReplies = replies_json["nextPageToken"]
-                        else:
-                            hasMoreReplies = False
+                            lastParentReplies = idComment
                             
-                    self.writeresult("\n")                           
+                        self.writeresult("\n")
+                        hasMoreReplies = False
+                    else:                  
+                        while hasMoreReplies is True:
+                            if nextPageTokenReplies != 0 :
+                                nextPageTokenRepliesString = "&pageToken=" + nextPageTokenReplies
+                                
+                            repliesURL = "https://www.googleapis.com/youtube/v3/comments?key=" + self.youtubeKey + "&parentId=" + idComment + \
+                            "&part=id,snippet&maxResults=100" + nextPageTokenRepliesString
+                            print(repliesURL)
+
+                            try:
+                                response = self.sessionGoogleApis.get(repliesURL, timeout=(3.05, 20))
+                                repliesResponse = response.text
+                                if response.status_code == 200:
+                                    replies_json = json.loads(repliesResponse)
+                                elif response.status_code == 404:
+                                    # Comment parentId not found
+                                    replies_json = json.loads(repliesResponse)
+                                    print(f"[×] idVideo={video['videoId']} Response of repliesURL {repliesURL} isn't OK : {response.status_code} {response.text}, error={replies_json['error']['message']}")
+                                    self.writelog(f"[×] idVideo={video['videoId']} Response of repliesURL {repliesURL} isn't OK : {response.status_code} {response.text}, error={replies_json['error']['message']}")
+                                    break
+                                elif response.status_code == 403:
+                                    # Cases where comments are turned off or insufficient permissions, see https://developers.google.com/youtube/v3/docs/errors#comments_youtube.comments.list
+                                    replies_json = json.loads(repliesResponse)
+                                    self.writeresult("\n")
+                                    self.writeresult(f"{replies_json['error']['message']}")
+                                    break
+                                else:
+                                    print(f"[×] idVideo={video['videoId']} Response of repliesURL {repliesURL} isn't OK : {response.status_code} {response.text}")
+                                    self.writelog(f"[×] idVideo={video['videoId']} Response of repliesURL {repliesURL} isn't OK : {response.status_code} {response.text}")
+                                    self.exitProgram()
+                            except Exception as e:
+                                print(f"[×] idVideo={self.videoId} Error repliesURL {repliesURL} : {e}")
+                                self.writelog(f"[×] idVideo={self.videoId} Error repliesURL {repliesURL} : {e}")
+                                self.exitProgram()
+
+                            items = replies_json.get('items')
+                            for item in items:
+                                realsnippet = item.get('snippet')
+                                author = realsnippet.get('authorDisplayName')
+                                channelId = realsnippet.get('authorChannelId').get('value')
+                                text = realsnippet.get('textDisplay')
+                                datePublish = realsnippet.get('publishedAt')
+                                dateUpdate = realsnippet.get('updatedAt')
+
+                                # Transform 2025-02-04T18:03:53Z to self.dateFormats["dateString"]
+                                #datePublish_object = datetime.fromisoformat(datePublish)
+                                datePublish_object = dateutil.parser.isoparse(datePublish)
+                                datePublish_text = datePublish_object.astimezone(self.tzinfo).strftime(self.dateFormats["dateString"])
+                                publish_dateString = datePublish_text
+
+                                update_dateString = ""
+                                if dateUpdate != datePublish:
+                                    #dateUpdate_object = datetime.fromisoformat(dateUpdate)
+                                    dateUpdate_object = dateutil.parser.isoparse(dateUpdate)
+                                    dateUpdate_text = dateUpdate_object.astimezone(self.tzinfo).strftime(self.dateFormats["dateString"])
+                                    update_dateString = " (last edited on " + dateUpdate_text + ")"
+                                
+                                # Clean HTML :
+                                # first replace <br> by new lines
+                                # then delete all HTML tags
+                                # https://www.geeksforgeeks.org/python/how-to-remove-html-tags-from-string-in-python/
+                                text = text.replace("\r\n", "<br>")
+                                text = text.replace("\r", "<br>")
+                                text = text.replace("<br>", "\n")
+                                soup = BeautifulSoup(text, "html.parser")
+                                textComment = soup.get_text()
+
+                                print(publish_dateString + update_dateString + " " + author + " (" + channelId + ")" + " : " + textComment)
+                                self.writeresult(publish_dateString + update_dateString + " " + author + " (" + channelId + ")" + " : " + textComment)
+                                lastParentReplies = idComment
+                                self.writeresult("\n")
+
+                            # Get continue token
+                            if "nextPageToken" in replies_json:
+                                nextPageTokenReplies = replies_json["nextPageToken"]
+                            else:
+                                hasMoreReplies = False
+                            
+                        self.writeresult("\n")                           
 
             # Get continue token
             if "nextPageToken" in comments_json:

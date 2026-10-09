@@ -141,6 +141,12 @@ class Program():
         session.mount("http://", adapter)
         return session
 
+    def split_list(self, lst, chunk_size):
+        chunks = []
+        for i in range(0, len(lst), chunk_size):
+            chunks.append(lst[i:i + chunk_size])
+        return chunks
+
     def initChannel(self):
         # Get handle from idchannel
         channelInfosURL = "https://www.googleapis.com/youtube/v3/channels?key=" + self.youtubeKey + "&id=" + self.idchannel + "&part=snippet"
@@ -247,6 +253,7 @@ class Program():
         self.writeresult("\n\n")
 
         # Get all url streams and Premiere videos
+        # TODO : replace by :
         videotypes = ["streams", "videos"]
         for videotype in videotypes:
             num_videos_processed = 0
@@ -263,33 +270,55 @@ class Program():
             self.writelog(f"Type : {videotype} (total : {num_videosList})")
             self.writeresult(f"Type : {videotype} (total : {num_videosList})")
             self.writeresult("\n\n")
-            
-            for video in videosList:
-                time.sleep(2)
-                url = "https://www.youtube.com/watch?v="+str(video['videoId'])
-               
+
+            # Get additional infos of video, 50 at once to optimize quota
+
+            # Create a new dict videosWithInfosList that will store videoId as key, and scrapetube and youtube data api values as value
+            # Only preserve livestreams and terminated Premiere video that has chat
+            videosWithInfosList = {}
+            i = 0
+            while i < len(videosList):
+                video = videosList[i]
                 if videotype == "videos":
+                    time.sleep(2)
+                    ditchVideo = False
                     # Impossible to determine with scrapetube.get_channel() if a video is a Premiere
                     # and I don't want to hit YTB API V3 /videos for each video and consume a lot of quota.
                     # So I can determine wether a video has/had a chat by hitting Youtube video page source checking in var ytInitialPlayerResponse = {}
-                    
+                    url = f"https://www.youtube.com/watch?v={video['videoId']}"
                     videoInfo = self.getVideoInfos(url)
                     # Pass if ytInitialPlayerResponse is None or videoDetails is None
                     if videoInfo['ytInitialPlayerResponse'] is None:
-                        continue
+                        ditchVideo = True
                     else:
                         if videoInfo['videoDetails'] is None:
-                            continue
+                            ditchVideo = True
                         else:
                             # Ditch video if : no chat, still on live, or is scheduled
                             if (videoInfo['videoDetails']['has_chat'] is False
                             or videoInfo['videoDetails']['is_live'] is True
                             or videoInfo['videoDetails']['scheduledStartTime'] is not None):
-                                continue
+                                ditchVideo = True
 
-                # Here, we only have streams and videos that have/had a chat
-                # If you don't want to use YTB API V3, use data in getVideoInfos function to get title, dates, description, duration, liveBroadcastDetails
-                additionnalInfosURL = "https://www.googleapis.com/youtube/v3/videos?key=" + self.youtubeKey + "&id=" + video['videoId'] + "&part=snippet,contentDetails,liveStreamingDetails,statistics"
+                    if ditchVideo is True:
+                        del videosList[i]
+                        continue
+
+                videosWithInfosList[video['videoId']] = video
+                i += 1
+              
+            chunk_size = 50
+            videosWithInfosList_chunk = self.split_list(videosList, chunk_size)
+
+            for videos_chunk in videosWithInfosList_chunk:
+                videoIdListChunkId = []             
+                for video in videos_chunk:
+                    videoIdListChunkId.append(video['videoId'])
+
+                videoIdListChunk = ','.join(videoIdListChunkId)
+
+                # Get additional infos of videos
+                additionnalInfosURL = "https://www.googleapis.com/youtube/v3/videos?key=" + self.youtubeKey + "&id=" + videoIdListChunk + "&part=snippet,contentDetails,liveStreamingDetails,statistics"
                 print(additionnalInfosURL)
                 try:
                     response = self.sessionGoogleApis.get(additionnalInfosURL, timeout=(3.05, 20))
@@ -297,33 +326,48 @@ class Program():
                     if response.status_code == 200:
                         video_json = json.loads(additionnalInfosResponse)
                         if video_json.get('pageInfo').get('totalResults') == 0:                        
-                            print(f"[×] idVideo={video['videoId']} video not found")
-                            self.writelog(f"[×] idVideo={video['videoId']} video not found")
+                            print(f"[×] {additionnalInfosURL} : no result")
+                            self.writelog(f"[×] {additionnalInfosURL} : no result")
                             continue
                     else:
-                        print(f"[×] idVideo={video['videoId']} Response of additionnalInfosURL {additionnalInfosURL} isn't OK : {response.status_code} {response.text}")
-                        self.writelog(f"[×] idVideo={video['videoId']} Response of additionnalInfosURL {additionnalInfosURL} isn't OK : {response.status_code} {response.text}")
+                        print(f"[×] Response of additionnalInfosURL {additionnalInfosURL} isn't OK : {response.status_code} {response.text}")
+                        self.writelog(f"[×] Response of additionnalInfosURL {additionnalInfosURL} isn't OK : {response.status_code} {response.text}")
                         self.exitProgram()
                 except Exception as e:
-                    print(f"[×] idVideo={video['videoId']} Error additionnalInfosURL {additionnalInfosURL} : {e}")
-                    self.writelog(f"[×] idVideo={video['videoId']} Error additionnalInfosURL {additionnalInfosURL} : {e}")
+                    print(f"[×] Error additionnalInfosURL {additionnalInfosURL} : {e}")
+                    self.writelog(f"[×] Error additionnalInfosURL {additionnalInfosURL} : {e}")
                     self.exitProgram()
-                        
-                item = video_json.get('items')[0]
-                snippet = item.get('snippet')
+
+                # Store video informations from Youtube Data API
+                videos_additionnalInfos = video_json.get('items')
+                for video_add in videos_additionnalInfos:
+                    videosWithInfosList[video_add.get('id')]['youtube_api'] = video_add
+
+            # Browse every video
+            for video_key, video_info in videosWithInfosList.items():
+                time.sleep(2)
+                idVideo = video_info['videoId']
+                url = f"https://www.youtube.com/watch?v={idVideo}"
+
+                if "youtube_api" not in video_info:
+                    print(f"[×] idVideo={idVideo} video not found")
+                    self.writelog(f"[×] idVideo={idVideo} video not found")
+                    continue
+                
+                snippet = video_info["youtube_api"].get('snippet')
                 dateVideo = snippet.get('publishedAt')
                 dateVideo_object = dateutil.parser.isoparse(dateVideo)
                 dateVideo_text = dateVideo_object.astimezone(self.tzinfo).strftime(self.dateFormats['dateString'])
                 title = snippet.get('title')
                 description = snippet.get('description')
 
-                contentDetails = item.get('contentDetails')
+                contentDetails = video_info["youtube_api"].get('contentDetails')
                 duration = contentDetails.get('duration', '')
                 durationString = duration[2:len(duration)]
 
                 # Check if video is ended. Because some videos can be scheduled and chat is on with messages, for this case video don't have start and endtime.
                 # liveBroadcastContent is "upcoming" if scheduled and will be "live" when on and none I guess when done. So we check "none"
-                if "liveStreamingDetails" in item and snippet.get("liveBroadcastContent") == "none":
+                if "liveStreamingDetails" in video_info["youtube_api"] and snippet.get("liveBroadcastContent") == "none":
                     print(url)
                     self.writeresult(url)
                     self.writeresult("\n")
@@ -333,9 +377,9 @@ class Program():
                     print("Date : " + dateVideo_text)
                     self.writeresult("Date : " + dateVideo_text)
                     
-                    actualStartTime_object = dateutil.parser.isoparse(item.get("liveStreamingDetails").get("actualStartTime", ""))
+                    actualStartTime_object = dateutil.parser.isoparse(video_info["youtube_api"].get("liveStreamingDetails").get("actualStartTime", ""))
                     actualStartTime_text = actualStartTime_object.astimezone(self.tzinfo).strftime(self.dateFormats['dateString'])
-                    actualEndTime_object = dateutil.parser.isoparse(item.get("liveStreamingDetails").get("actualEndTime", ""))
+                    actualEndTime_object = dateutil.parser.isoparse(video_info["youtube_api"].get("liveStreamingDetails").get("actualEndTime", ""))
                     actualEndTime_text = actualEndTime_object.astimezone(self.tzinfo).strftime(self.dateFormats['dateString'])                                  
                     print("start : " + actualStartTime_text)
                     self.writeresult(" (start : " + actualStartTime_text)
@@ -369,8 +413,8 @@ class Program():
                         self.writeresult("\n")
                     # These are errors
                     except Exception as ex:
-                        print(f"[×] idVideo={video['videoId']} Error writing chat : {ex}")
-                        self.writelog(f"[×] idVideo={video['videoId']} Error writing chat : {ex}")
+                        print(f"[×] idVideo={idVideo} Error writing chat : {ex}")
+                        self.writelog(f"[×] idVideo={idVideo} Error writing chat : {ex}")
                         self.exitProgram()
 
                     self.writeresult("\n")
