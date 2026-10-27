@@ -254,8 +254,8 @@ class Program():
                 elif response.status_code == 404:
                     # Video not found
                     comments_json = json.loads(commentsResponse)                           
-                    print(f"[×] idVideo={video['videoId']} Response of commentsURL {commentsURL} isn't OK : {response.status_code} {response.text}, error={comments_json['error']['message']}")
-                    self.writelog(f"[×] idVideo={video['videoId']} Response of commentsURL {commentsURL} isn't OK : {response.status_code} {response.text}, error={comments_json['error']['message']}")
+                    print(f"[×] idVideo={self.videoId} Response of commentsURL {commentsURL} isn't OK : {response.status_code} {response.text}, error={comments_json['error']['message']}")
+                    self.writelog(f"[×] idVideo={self.videoId} Response of commentsURL {commentsURL} isn't OK : {response.status_code} {response.text}, error={comments_json['error']['message']}")
                     break
                 elif response.status_code == 403:
                     # Cases where comments are turned off or insufficient permissions, see https://developers.google.com/youtube/v3/docs/errors#commentThreads_youtube.commentThreads.list
@@ -264,8 +264,8 @@ class Program():
                     self.writeresult(f"{comments_json['error']['message']}")
                     break
                 else:
-                    print(f"[×] idVideo={video['videoId']} Response of commentsURL {commentsURL} isn't OK : {response.status_code} {response.text}")
-                    self.writelog(f"[×] idVideo={video['videoId']} Response of commentsURL {commentsURL} isn't OK : {response.status_code} {response.text}")
+                    print(f"[×] idVideo={self.videoId} Response of commentsURL {commentsURL} isn't OK : {response.status_code} {response.text}")
+                    self.writelog(f"[×] idVideo={self.videoId} Response of commentsURL {commentsURL} isn't OK : {response.status_code} {response.text}")
                     self.exitProgram()
             except Exception as e:
                 print(f"[×] idVideo={self.videoId} Error commentsURL {commentsURL} : {e}")
@@ -324,7 +324,19 @@ class Program():
                     print("*** Replies : " + str(snippet.get('totalReplyCount')) + " ***")
                     self.writeresult("*** Replies : " + str(snippet.get('totalReplyCount')) + " ***\n")
 
-                    # Check if comment has all replies in replies object, if not get them with /comments endpoint
+                    # item.get('replies').get('comments') can be missing in some cases :
+                    # all comments are filtered by Youtube, or from a blocked author or when Youtube Data API bugs (because if you call same request again comments are present)
+                    # So, to be sure we call /comments endpoint
+                    
+                    # Length of item.get('replies').get('comments') can be different from snippet.get('totalReplyCount') in some cases :
+                    # some comments are filtered by Youtube, or from a blocked author or when Youtube Data API only returned a part of replies (see documentation)
+                    # So, in these cases we call /comments endpoint                     
+                    
+                    if len(item.get('replies', {}).get('comments', {})) == 0:
+                        print(f"No replies found for idVideo={self.videoId}, idComment={idComment}, totalReplyCount={snippet.get('totalReplyCount')} : replies={item.get('replies')}")
+                        self.writelog(f"No replies found for idVideo={self.videoId}, idComment={idComment}, totalReplyCount={snippet.get('totalReplyCount')} : replies={item.get('replies')}")
+                    
+                    # All replies are in replies object
                     if len(item.get('replies').get('comments')) == snippet.get('totalReplyCount'):
                         replies = item.get('replies').get('comments')
                         for reply in replies :
@@ -365,7 +377,8 @@ class Program():
                             
                         self.writeresult("\n")
                         hasMoreReplies = False
-                    else:                  
+                    else:  
+                        # Get replies from /comments endpoint                        
                         while hasMoreReplies is True:
                             if nextPageTokenReplies != 0 :
                                 nextPageTokenRepliesString = "&pageToken=" + nextPageTokenReplies
@@ -382,8 +395,8 @@ class Program():
                                 elif response.status_code == 404:
                                     # Comment parentId not found
                                     replies_json = json.loads(repliesResponse)
-                                    print(f"[×] idVideo={video['videoId']} Response of repliesURL {repliesURL} isn't OK : {response.status_code} {response.text}, error={replies_json['error']['message']}")
-                                    self.writelog(f"[×] idVideo={video['videoId']} Response of repliesURL {repliesURL} isn't OK : {response.status_code} {response.text}, error={replies_json['error']['message']}")
+                                    print(f"[×] idVideo={self.videoId} Response of repliesURL {repliesURL} isn't OK : {response.status_code} {response.text}, error={replies_json['error']['message']}")
+                                    self.writelog(f"[×] idVideo={self.videoId} Response of repliesURL {repliesURL} isn't OK : {response.status_code} {response.text}, error={replies_json['error']['message']}")
                                     break
                                 elif response.status_code == 403:
                                     # Cases where comments are turned off or insufficient permissions, see https://developers.google.com/youtube/v3/docs/errors#comments_youtube.comments.list
@@ -392,8 +405,8 @@ class Program():
                                     self.writeresult(f"{replies_json['error']['message']}")
                                     break
                                 else:
-                                    print(f"[×] idVideo={video['videoId']} Response of repliesURL {repliesURL} isn't OK : {response.status_code} {response.text}")
-                                    self.writelog(f"[×] idVideo={video['videoId']} Response of repliesURL {repliesURL} isn't OK : {response.status_code} {response.text}")
+                                    print(f"[×] idVideo={self.videoId} Response of repliesURL {repliesURL} isn't OK : {response.status_code} {response.text}")
+                                    self.writelog(f"[×] idVideo={self.videoId} Response of repliesURL {repliesURL} isn't OK : {response.status_code} {response.text}")
                                     self.exitProgram()
                             except Exception as e:
                                 print(f"[×] idVideo={self.videoId} Error repliesURL {repliesURL} : {e}")

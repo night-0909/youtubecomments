@@ -194,10 +194,10 @@ class Program():
                 for video in videos_chunk:
                     videoIdListChunk.append(video['videoId'])
 
-                videoIdListChunk = ','.join(videoIdListChunk)
+                videoIdListChunkStr = ','.join(videoIdListChunk)
 
                 # Get additional infos of videos
-                additionnalInfosURL = "https://www.googleapis.com/youtube/v3/videos?key=" + self.youtubeKey + "&id=" + videoIdListChunk + "&part=snippet,contentDetails,liveStreamingDetails,statistics"
+                additionnalInfosURL = "https://www.googleapis.com/youtube/v3/videos?key=" + self.youtubeKey + "&id=" + videoIdListChunkStr + "&part=snippet,contentDetails,liveStreamingDetails,statistics"
                 print(additionnalInfosURL)
                 try:
                     response = self.sessionGoogleApis.get(additionnalInfosURL, timeout=(3.05, 20))
@@ -387,8 +387,20 @@ class Program():
                             print("*** Replies : " + str(snippet.get('totalReplyCount')) + " ***")
                             self.writeresult("*** Replies : " + str(snippet.get('totalReplyCount')) + " ***\n")
 
-                            # Check if comment has all replies in replies object, if not get them with /comments endpoint
-                            if len(item.get('replies').get('comments')) == snippet.get('totalReplyCount'):
+                            # item.get('replies').get('comments') can be missing in some cases :
+                            # all comments are filtered by Youtube, or from a blocked author or when Youtube Data API bugs (because if you call same request again comments are present)
+                            # So, to be sure we call /comments endpoint
+                            
+                            # Length of item.get('replies').get('comments') can be different from snippet.get('totalReplyCount') in some cases :
+                            # some comments are filtered by Youtube, or from a blocked author or when Youtube Data API only returned a part of replies (see documentation)
+                            # So, in these cases we call /comments endpoint 
+                            
+                            if len(item.get('replies', {}).get('comments', {})) == 0:
+                                print(f"No replies found for idVideo={idVideo}, idComment={idComment}, totalReplyCount={snippet.get('totalReplyCount')} : replies={item.get('replies')}")
+                                self.writelog(f"No replies found for idVideo={idVideo}, idComment={idComment}, totalReplyCount={snippet.get('totalReplyCount')} : replies={item.get('replies')}")
+
+                            # All replies are in replies object
+                            if len(item.get('replies', {}).get('comments', {})) == snippet.get('totalReplyCount'):
                                 replies = item.get('replies').get('comments')
                                 for reply in replies :
                                     realsnippet = reply.get('snippet')
@@ -429,6 +441,7 @@ class Program():
                                 self.writeresult("\n")
                                 hasMoreReplies = False
                             else:
+                                # Get replies from /comments endpoint
                                 while hasMoreReplies is True:
                                     if nextPageTokenReplies != 0 :
                                         nextPageTokenRepliesString = "&pageToken=" + nextPageTokenReplies
