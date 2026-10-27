@@ -311,14 +311,14 @@ class Program():
             videosWithInfosList_chunk = self.split_list(videosList, chunk_size)
 
             for videos_chunk in videosWithInfosList_chunk:
-                videoIdListChunkId = []             
+                videoIdListChunk = []             
                 for video in videos_chunk:
-                    videoIdListChunkId.append(video['videoId'])
+                    videoIdListChunk.append(video['videoId'])
 
-                videoIdListChunk = ','.join(videoIdListChunkId)
+                videoIdListChunkStr = ','.join(videoIdListChunk)
 
                 # Get additional infos of videos
-                additionnalInfosURL = "https://www.googleapis.com/youtube/v3/videos?key=" + self.youtubeKey + "&id=" + videoIdListChunk + "&part=snippet,contentDetails,liveStreamingDetails,statistics"
+                additionnalInfosURL = "https://www.googleapis.com/youtube/v3/videos?key=" + self.youtubeKey + "&id=" + videoIdListChunkStr + "&part=snippet,contentDetails,liveStreamingDetails,statistics"
                 print(additionnalInfosURL)
                 try:
                     response = self.sessionGoogleApis.get(additionnalInfosURL, timeout=(3.05, 20))
