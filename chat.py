@@ -253,7 +253,6 @@ class Program():
         self.writeresult("\n\n")
 
         # Get all url streams and Premiere videos
-        # TODO : replace by :
         videotypes = ["streams", "videos"]
         for videotype in videotypes:
             num_videos_processed = 0
